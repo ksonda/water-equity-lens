@@ -1,0 +1,97 @@
+---
+title: "Xylem Water Equity Lens Indicator Development"
+author: 
+  - Kyle Onda^[kyle.onda@gmail.com]
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    fig_width: 8
+    fig_height: 8
+    theme: readable
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+library(webshot)
+library(tidycensus)
+```
+## Introduction
+This document fully explains the source data, simulated data, and calculations required to reproduce the Water Equity Lens Pillars for the Naperville, IL example. The `Source data` section explains data sources used for this example. The `Calculate of Simulate tract-level equity indicators` section documents how source data 
+
+## Source data
+
+In this section, we procure any raw real-world source data, and save in GeoJSON format in the `/data` directory. In this case, the real-world source data comes from the [U.S. Census American Community Survey 5-year Data API](https://www.census.gov/data/developers/data-sets/acs-5year.html), the [Naperville Geographic Open Data Portal](https://map-naperville.opendata.arcgis.com), or the [Naperville Water and Wastewater Utility website](https://www.naperville.il.us/services/water-utility/)
+
+### Service area boundary
+
+For the purposes of this exercise, we take the service area boundary to be the municipal boundary of the City of Naperville, IL. Note that in a real-world context, we would want to use the actual service area boundary, which can cross municipal boundaries. This is particularly important due to situations where multiple utilities serve one municipality, including areas that differ socioeconomically. It is also important in situations where utilities charge different rates to customers depending on which municipality (or unincorporated area) they are located within.
+
+```{r,  fig.keep=1}
+# boundary_url <- "https://opendata.arcgis.com/datasets/8ae0f0fd2f854bc184ce61c56d140585_0.geojson"
+# boundary <- sf::read_sf(boundary_url)
+# sf::st_write(boundary,"../cache/boundary.geojson")
+# boundary <- sf::read_sf("../cache/boundary.geojson")
+# sf::st_write(boundary,"../data/boundary.geojson")
+boundary <- sf::read_sf("../data/boundary.geojson")
+map <- mapview::mapview(boundary,
+                        alpha.regions=0,
+                        stroke=TRUE,
+                        color="blue",
+                        lwd=2,
+                        layer.name="Naperville, IL Boundary")
+map
+```
+
+### Census
+
+Here we procure Census Tract and Block group information
+
+```{r source }
+tidycensus::census_api_key("b25f8b1b7bf10561c9cbc3a20a4d2572677f1f05")
+vars <- tidycensus::load_variables(2019, "acs5", cache = TRUE)
+
+tracts <- tidycensus::get_acs(year=2019,geography = "tract",
+                   variables = "B01001_001", geometry = TRUE, state= "IL") %>% sf::st_transform(4326)
+tracts <- tracts[boundary,op=sf::st_intersects]
+
+bg <- tidycensus::get_acs(year=2019,geography = "block group",
+                   variables = "B01001_001", geometry = TRUE, state= "IL") %>% sf::st_transform(4326)
+bg <- bg[boundary,op=sf::st_intersects]
+# save(bg, file="Data/census_blockgroups.rds")
+```
+
+### Utility data
+
+#### Water (& sewer) rates
+
+#### Lead service lines
+
+```{r}
+lead_line_url <- "https://opendata.arcgis.com/datasets/945218b0377a481284203d8839d1cab4_0.geojson"
+
+
+
+```
+
+#### Pipe network
+
+#### Hydrants
+
+## Calculate or Simulate tract-level equity indicators
+
+### Pillar 1: Access, Affordability, and Water Quality 
+
+### Pillar 2: Workforce and Economic Development Benefits
+
+### Pillar 3: Resilience and Investment
+
+```{r cars}
+summary(cars)
+```
+
