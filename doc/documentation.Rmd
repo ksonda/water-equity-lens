@@ -56,13 +56,89 @@ Here we procure Census Tract and Block group information
 tidycensus::census_api_key("b25f8b1b7bf10561c9cbc3a20a4d2572677f1f05")
 vars <- tidycensus::load_variables(2019, "acs5", cache = TRUE)
 
-tracts <- tidycensus::get_acs(year=2019,geography = "tract",
-                   variables = "B01001_001", geometry = TRUE, state= "IL") %>% sf::st_transform(4326)
+census_vars <- c(tot_pop = "B01001_001",
+                 pop_white = "B02001_002",
+                 pop_black = "B02001_003",
+                 pop_american_indian_native_alaskan = "B02001_004",
+                 pop_asian = "B02001_005",
+                 pop_native_hawaiian_pacific_islander = "B02001_006",
+                 pop_other_race = "B02001_007",
+                 pop_two_or_more_races = "B02001_008",
+                 pop_hispanic = "B03002_012",
+                 pop_hispanic_white_alone = "B03002_013",
+                 tot_pop_travel_time_work_estimated = "B08012_001",
+                 pop_travel_time_work_less_5min = "B08012_002",
+                 pop_travel_time_work_5_9min = "B08012_003",
+                 pop_travel_time_work_10_14min = "B08012_004",
+                 pop_travel_time_work_15_19min = "B08012_005",
+                 pop_travel_time_work_20_24min = "B08012_006",
+                 pop_travel_time_work_25_29min = "B08012_007",
+                 pop_travel_time_work_30_34min = "B08012_008",
+                 pop_travel_time_work_35_39min = "B08012_009",
+                 pop_travel_time_work_40_44min = "B08012_010",
+                 pop_travel_time_work_45_59min = "B08012_011",
+                 pop_travel_time_work_60_89min = "B08012_012",
+                 pop_travel_time_work_atleast_90min = "B08012_013",
+                 median_hh_income="B19013_001",
+                 pop_in_hh_with_income_assistance="B09010_002",
+                 pop_in_hh_with_no_income_assistance="B09010_008",
+                 hh_inc_5k="B19001_002",
+                 hh_inc_12.5k="B19001_003",
+                 hh_inc_17.5k="B19001_004",
+                 hh_inc_22.5k="B19001_005",
+                 hh_inc_27.5k="B19001_006",
+                 hh_inc_32.5k="B19001_007",
+                 hh_inc_37.5k="B19001_008",
+                 hh_inc_42.5k="B19001_009",
+                 hh_inc_47.5k="B19001_010",
+                 hh_inc_55k="B19001_011",
+                 hh_inc_67.5k="B19001_012",
+                 hh_inc_87.5k="B19001_013",
+                 hh_inc_112.5k="B19001_014",
+                 hh_inc_137.5k="B19001_015",
+                 hh_inc_175k="B19001_016",
+                 hh_inc_gr200k="B19001_017",
+                 hh_income_count = "B19001_001"
+                 )
+
+## Download all counties, and ifnd counties that intersect the boundary
+counties <- tidycensus::get_acs(year=2019,
+                                geography = "county",
+                                variables = "B01001_001",
+                                geometry = TRUE)  %>% 
+  sf::st_transform(4326) %>%
+  dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
+
+# Find FIPS code for relevant state and counties, make sure no duplicates
+st <- unique(substr(counties$GEOID,1,2)) 
+ct <- unique(substr(counties$GEOID,3,5))
+
+# Get data for census tracts intersecting the boundary, having first gotten only
+# tracts from the state/county the boundary intersects
+tracts <- tidycensus::get_acs(year=2019,
+                              geography = "tract",
+                              variables = "B01001_001",
+                              geometry = TRUE,
+                              state = st,
+                              county = ct) %>% 
+  sf::st_transform(4326) %>%
+  dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
 tracts <- tracts[boundary,op=sf::st_intersects]
 
-bg <- tidycensus::get_acs(year=2019,geography = "block group",
-                   variables = "B01001_001", geometry = TRUE, state= "IL") %>% sf::st_transform(4326)
-bg <- bg[boundary,op=sf::st_intersects]
+
+# Get data for census block groups intersecting the boundary, having first gotten only
+# block groups from the state/county the boundary intersects
+
+bg <- tidycensus::get_acs(year=2019,
+                          geography = "block group",
+                          variables = "B01001_001",
+                          geometry = TRUE,
+                          state = st,
+                          county = ct) %>% 
+  sf::st_transform(4326) %>%
+  dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
+
+ 
 # save(bg, file="Data/census_blockgroups.rds")
 ```
 
