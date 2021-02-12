@@ -23,6 +23,8 @@ library(tidycensus)
 library(mapview)
 library(leafsync)
 library(esri2sf)
+library(plotly)
+library(ggthemes)
 ```
 ## Introduction
 This document fully explains the source data, simulated data, and calculations required to reproduce the Water Equity Lens Pillars for the Naperville, IL example. The `Source data` section explains data sources used for this example. The `Calculate of Simulate tract-level equity indicators` section documents how source data 
@@ -295,6 +297,7 @@ bg <- tidycensus::get_acs(year=2019,
 # st_write(bg,"../data/blockgroups.geojson", append=FALSE)
 # write.csv(st_drop_geometry(bg),"../data/blockgroups.csv")
 
+
 ```
 
 The data can be further manipulated and visualized, for example, below we compare the % of the population that is White with the median year built of residential structures in Census Tracts and Census Block groups that intersect the Naperville boundary. In the example comparison, nonwhite populations are spatially correlated with newer building stock. Indicators for the Equity Lens Pillars should probably account for several different axes of infrastructure access. Some notable features of these maps: 
@@ -355,7 +358,28 @@ sync(bg.white.map,tracts.white.map,bg.yearbuilt.map,tracts.yearbuilt.map)
 
 #### Water (& sewer) rates
 
-See here: [https://www.naperville.il.us/waterrates](https://www.naperville.il.us/waterrates) 
+See here: [https://www.naperville.il.us/waterrates](https://www.naperville.il.us/waterrates) Below, we write a function that takes as function the volume in gallons consumed in 1 month and returns the total water and sewer bill at current rates, assuming a 5/8" residential meter, and calculate the complete volume-bill curve
+
+```{r rates, results="asis"}
+calculate_bill <- function(volume = 6000){
+  fixed_charges = 7.63 + 9.85 + 1.8
+  vol_rate = 5.76 + 2.71 
+  bill = fixed_charges+ (vol_rate*volume)/748.052
+  return(bill)
+}
+
+volume <- seq.int(from = 0, to = 20000, by = 100)
+bill <- calculate_bill(volume) 
+bill <- data.frame(cbind(volume,bill))
+
+p <- ggplot(data=bill, aes(x=volume,y=bill)) + 
+  geom_line() +
+  theme_tufte(base_size=18) + 
+  ylab('Monthly Water and Sewer Bill (USD)') + 
+  xlab('Monthly water consumption (gallons)') 
+ggplotly(p)
+
+```
 
 #### Lead service lines
 
@@ -396,12 +420,41 @@ mapview(boundary,alpha.regions=0,col.regions="black",stroke=TRUE,color="black",l
 ```
 
 
-## Calculate or Simulate tract-level equity indicators
+## Develop and simulate Water Equity Lens indicators
 
 ### Pillar 1: Access, Affordability, and Water Quality 
+
+Pillar 1 focuses on access and affordability of water and sewer services. 
+
+#### Access to water services
+
+
+#### Quality of service
+
+*Proportion of households that have been affected by at least 1 service interruption
+
+*Proportion of households that have been affected by at least 1 boil water advisory
+
+*Proportion of households that have been affected by at least 1 health-based SDWA violation
+
+#### Affordability
+
+The ideal affordability measure would be the proportion of households in the service area for whom the annual expenditures on water and sewer services (net of any customer assistance program subsidies) exceeded some threshold percent value of their annual income, which could be tailored to neighborhoods based on cost of living. However, without household-level data, or even detailed cross-tabulations of household income and size, such a measure is impossible to calculate with a reliable degree of accuracy.
+
+* Approach 1: HBI/PPI
+
+![Image name](http://www.host.com/image.png)
+
+
+* Whether there is a CAP program
+* Ratio of HH in CAP program to HH on TANF/SNAP
+* Proportion of HH cut off due to nonpayment at least once/twice
 
 ### Pillar 2: Workforce and Economic Development Benefits
 
 ### Pillar 3: Resilience and Investment
 
+* Proprtion structures with lead service lines
+
+* 
 
