@@ -67,37 +67,37 @@ vars <- tidycensus::load_variables(2019, "acs5", cache = TRUE) # download all po
 
 #set list of variables to pull for tracts/ block groups
 cv <- c(pop_race_count = "B01001_001",
-                 pop_race_white = "B02001_002",
-                 pop_race_black = "B02001_003",
-                 pop_race_american_indian_native_alaskan = "B02001_004",
-                 pop_race_asian = "B02001_005",
-                 pop_race_native_hawaiian_pacific_islander = "B02001_006",
-                 pop_race_other_race = "B02001_007",
-                 pop_race_two_or_more_races = "B02001_008",
-                 pop_hispanic = "B03002_012",
-                 pop_hispanic_white_alone = "B03002_013",
-                 pop_travel_time_work_count = "B08012_001",
-                 pop_travel_time_work_less_5min = "B08012_002",
-                 pop_travel_time_work_5_9min = "B08012_003",
-                 pop_travel_time_work_10_14min = "B08012_004",
-                 pop_travel_time_work_15_19min = "B08012_005",
-                 pop_travel_time_work_20_24min = "B08012_006",
-                 pop_travel_time_work_25_29min = "B08012_007",
-                 pop_travel_time_work_30_34min = "B08012_008",
-                 pop_travel_time_work_35_39min = "B08012_009",
-                 pop_travel_time_work_40_44min = "B08012_010",
-                 pop_travel_time_work_45_59min = "B08012_011",
-                 pop_travel_time_work_60_89min = "B08012_012",
-                 pop_travel_time_work_atleast_90min = "B08012_013",
-                 hh_type_total_count = "B11016_001",
-                 hh_type_family_count = "B11016_002",
-                 hh_type_family_size_2 = "B11016_003", 
-                 hh_type_family_size_3 = "B11016_004", 
-                 hh_type_family_size_4 = "B11016_005", 
-                 hh_type_family_size_5 = "B11016_006", 
-                 hh_type_family_size_6 = "B11016_007", 
-                 hh_type_family_size_7more = "B11016_008", 
-                 hh_type_nonfamily_count = "B11016_009",
+        pop_race_white = "B02001_002",
+        pop_race_black = "B02001_003",
+        pop_race_american_indian_native_alaskan = "B02001_004",
+        pop_race_asian = "B02001_005",
+        pop_race_native_hawaiian_pacific_islander = "B02001_006",
+        pop_race_other_race = "B02001_007",
+        pop_race_two_or_more_races = "B02001_008",
+        pop_hispanic = "B03002_012",
+        pop_hispanic_white_alone = "B03002_013",
+        pop_travel_time_work_count = "B08012_001",
+        pop_travel_time_work_less_5min = "B08012_002",
+        pop_travel_time_work_5_9min = "B08012_003",
+        pop_travel_time_work_10_14min = "B08012_004",
+        pop_travel_time_work_15_19min = "B08012_005",
+        pop_travel_time_work_20_24min = "B08012_006",
+        pop_travel_time_work_25_29min = "B08012_007",
+        pop_travel_time_work_30_34min = "B08012_008",
+        pop_travel_time_work_35_39min = "B08012_009",
+        pop_travel_time_work_40_44min = "B08012_010",
+        pop_travel_time_work_45_59min = "B08012_011",
+        pop_travel_time_work_60_89min = "B08012_012",
+        pop_travel_time_work_atleast_90min = "B08012_013",
+        hh_type_total_count = "B11016_001",
+        hh_type_family_count = "B11016_002",
+        hh_type_family_size_2 = "B11016_003", 
+        hh_type_family_size_3 = "B11016_004", 
+        hh_type_family_size_4 = "B11016_005", 
+        hh_type_family_size_5 = "B11016_006", 
+        hh_type_family_size_6 = "B11016_007", 
+        hh_type_family_size_7more = "B11016_008", 
+        hh_type_nonfamily_count = "B11016_009",
                  hh_type_nonfamily_size_1 = "B11016_010",
                  hh_type_nonfamily_size_2 = "B11016_011", 
                  hh_type_nonfamily_size_3 = "B11016_012", 
@@ -248,7 +248,71 @@ cv <- c(pop_race_count = "B01001_001",
                  median_gross_rent_percent_hh_income = "B25071_001",
                  home_value_lower_quartile = "B25076_001",
                  home_value_median = "B25077_001",
-                 home_value_upper_quartile = "B25078_001"
+                 home_value_upper_quartile = "B25078_001",
+        hh_inc_rent_count = "B25074_001",
+        hh_inc_less_10k_rent_count = "B25074_002",
+        hh_inc_less_10k_rent_less_20perc = "B25074_003",
+        hh_inc_less_10k_rent_20_24.9perc = "B25074_004",
+        hh_inc_less_10k_rent_25_29.9perc = "B25074_005",
+        hh_inc_less_10k_rent_30_34.9perc = "B25074_006",
+        hh_inc_less_10k_rent_35_39.9perc = "B25074_007",
+        hh_inc_less_10k_rent_40_49.9perc = "B25074_008",
+        hh_inc_less_10k_rent_more_50perc = "B25074_009",
+        hh_inc_less_10k_rent_notComputed = "B25074_010",
+              hh_inc_10k_19.9k_rent_count = "B25074_011",
+        hh_inc_10k_19.9k_rent_less_20perc = "B25074_012",
+        hh_inc_10k_19.9k_rent_20_24.9perc = "B25074_013",
+        hh_inc_10k_19.9k_rent_25_29.9perc = "B25074_014",
+        hh_inc_10k_19.9k_rent_30_34.9perc = "B25074_015",
+        hh_inc_10k_19.9k_rent_35_39.9perc = "B25074_016",
+        hh_inc_10k_19.9k_rent_40_49.9perc = "B25074_017",
+        hh_inc_10k_19.9k_rent_more_50perc = "B25074_018",
+        hh_inc_10k_19.9k_rent_notComputed = "B25074_019",
+              hh_inc_20k_34.9k_rent_count = "B25074_020",
+        hh_inc_20k_34.9k_rent_less_20perc = "B25074_021",
+        hh_inc_20k_34.9k_rent_20_24.9perc = "B25074_022",
+        hh_inc_20k_34.9k_rent_25_29.9perc = "B25074_023",
+        hh_inc_20k_34.9k_rent_30_34.9perc = "B25074_024",
+        hh_inc_20k_34.9k_rent_35_39.9perc = "B25074_025",
+        hh_inc_20k_34.9k_rent_40_49.9perc = "B25074_026",
+        hh_inc_20k_34.9k_rent_more_50perc = "B25074_027",
+        hh_inc_20k_34.9k_rent_notComputed = "B25074_028",
+              hh_inc_35k_49.9k_rent_count = "B25074_029",
+        hh_inc_35k_49.9k_rent_less_20perc = "B25074_030",
+        hh_inc_35k_49.9k_rent_20_24.9perc = "B25074_031",
+        hh_inc_35k_49.9k_rent_25_29.9perc = "B25074_032",
+        hh_inc_35k_49.9k_rent_30_34.9perc = "B25074_033",
+        hh_inc_35k_49.9k_rent_35_39.9perc = "B25074_034",
+        hh_inc_35k_49.9k_rent_40_49.9perc = "B25074_035",
+        hh_inc_35k_49.9k_rent_more_50perc = "B25074_036",
+        hh_inc_35k_49.9k_rent_notComputed = "B25074_037",
+              hh_inc_50k_74.9k_rent_count = "B25074_038",
+        hh_inc_50k_74.9k_rent_less_20perc = "B25074_039",
+        hh_inc_50k_74.9k_rent_20_24.9perc = "B25074_040",
+        hh_inc_50k_74.9k_rent_25_29.9perc = "B25074_041",
+        hh_inc_50k_74.9k_rent_30_34.9perc = "B25074_042",
+        hh_inc_50k_74.9k_rent_35_39.9perc = "B25074_043",
+        hh_inc_50k_74.9k_rent_40_49.9perc = "B25074_044",
+        hh_inc_50k_74.9k_rent_more_50perc = "B25074_045",
+        hh_inc_50k_74.9k_rent_notComputed = "B25074_046",
+              hh_inc_75k_99.9k_rent_count = "B25074_047",
+        hh_inc_75k_99.9k_rent_less_20perc = "B25074_048",
+        hh_inc_75k_99.9k_rent_20_24.9perc = "B25074_049",
+        hh_inc_75k_99.9k_rent_25_29.9perc = "B25074_050",
+        hh_inc_75k_99.9k_rent_30_34.9perc = "B25074_051",
+        hh_inc_75k_99.9k_rent_35_39.9perc = "B25074_052",
+        hh_inc_75k_99.9k_rent_40_49.9perc = "B25074_053",
+        hh_inc_75k_99.9k_rent_more_50perc = "B25074_054",
+        hh_inc_75k_99.9k_rent_notComputed = "B25074_055",
+         hh_inc_more_100k_rent_count = "B25074_056",
+        hh_inc_more_100k_rent_less_20perc = "B25074_057",
+        hh_inc_more_100k_rent_20_24.9perc = "B25074_058",
+        hh_inc_more_100k_rent_25_29.9perc = "B25074_059",
+        hh_inc_more_100k_rent_30_34.9perc = "B25074_060",
+        hh_inc_more_100k_rent_35_39.9perc = "B25074_061",
+        hh_inc_more_100k_rent_40_49.9perc = "B25074_062",
+        hh_inc_more_100k_rent_more_50perc = "B25074_063",
+        hh_inc_more_100k_rent_notComputed = "B25074_064",
                  )
 
 ## Download all counties, and ifnd counties that intersect the boundary
@@ -424,9 +488,7 @@ mapview(boundary,alpha.regions=0,col.regions="black",stroke=TRUE,color="black",l
 
 ### Pillar 1: Access, Affordability, and Water Quality 
 
-Pillar 1 focuses on access and affordability of water and sewer services. 
-
-#### Access to water services
+Pillar 1 focuses on access to affordable and high quality water and sewer services. 
 
 
 #### Quality of service
@@ -443,8 +505,13 @@ The ideal affordability measure would be the proportion of households in the ser
 
 * Approach 1: HBI/PPI
 
-![Image name](http://www.host.com/image.png)
+One approach was developed for AWWA, NACQA, and WEF. It is elaborated in [this report](https://raw.githubusercontent.com/ksonda/water-equity-lens/draft1/literature/DevelopingNewFrameworkForAffordabilityReport.pdf?token=AKQHTNUSCBCKR3XAIOECHDTAE3YYG) 
 
+![HBI/PPI](https://raw.githubusercontent.com/ksonda/water-equity-lens/draft1/doc/tab32.png?token=AKQHTNSF6UUWMCCPOFQY4VDAE3WJY)
+
+Its 4-level qualitative scale could be easily converted into a color scale/gage/stoplight, and is easily calculated from US Block Group. 
+
+* Approach 2: Proportion renting HH whose bills are likely above 10% of their income net of gross rent/ housing costs. 
 
 * Whether there is a CAP program
 * Ratio of HH in CAP program to HH on TANF/SNAP
