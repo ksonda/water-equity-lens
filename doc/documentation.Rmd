@@ -7,6 +7,7 @@ output:
   html_document:
     toc: true
     toc_float: true
+    toc_depth: 4
     code_folding: hide
     fig_width: 8
     fig_height: 8
@@ -26,8 +27,110 @@ library(esri2sf)
 library(plotly)
 library(ggthemes)
 ```
-## Introduction
-This document fully explains the source data, simulated data, and calculations required to reproduce the Water Equity Lens Pillars for the Naperville, IL example. The `Source data` section explains data sources used for this example. The `Calculate of Simulate tract-level equity indicators` section documents how source data 
+
+## Potential Water Equity Lens indicators
+
+### Pillar 1: Access: Affordability, and Water Quality 
+
+Pillar 1 focuses on access to affordable and high quality water and sewer services. 
+
+
+#### Quality of service
+
+* Proportion of households that have been affected by at least 1 service interruption
+
+  - Source: Utility records
+
+* Proportion of households that have been affected by at least 1 boil water advisory
+
+  - Source: Utility records. County public health departments
+
+* Proportion of households that have been affected by at least 1 health-based SDWA violation 
+
+  - Source: SDWIS/ State DEQ + Utlity information about service area portion relevant.
+
+#### Affordability
+
+The ideal affordability measure would be the proportion of households in the service area for whom the annual expenditures on water and sewer services (net of any customer assistance program subsidies) exceeded some threshold percent value of their annual income, which could be tailored to neighborhoods based on cost of living. However, without household-level data, or even detailed cross-tabulations of household income and size, such a measure is impossible to calculate with a reliable degree of accuracy.
+
+ - Source: Utility rate structures. US Census ACS 5-year (Places, Tracts, Block Groups)
+ 
+##### Approach 0: % MHI
+
+This is the conventional, if outdated metric. We use the median income of the Census Place, or the household count-weighted average median income of Census Tracts as the denominator. We use the utility-reported "average water bill" for the numerator.
+
+##### Approach 1: HBI/PPI Matrix
+
+
+This approach was developed for AWWA, NACQA, and WEF. It is elaborated in [this report](../literature/DevelopingNewFrameworkForAffordabilityReport.pdf) 
+
+![HBI/PPI](tab32.png)
+
+The LQI could be calculated from the Census statistic for the relevant Census Place, or when inapplicable, from household count-weighted averages of the upper limit of the 20th percentile of household income within Census Tracts or Block Groups. 
+
+Basic water/sewer cost is taken from assuming a "basic services" level of consumption in terms of gallons per capita per day (generally 50), and a representative household size.
+
+The PPI could be similarly taken from the relevant Census Place, or household count-weighted averages of the value within constituent Census Tracts or Block Groups of the service area. 
+
+An issue with even this simplified metric is it makes a fundamental point assumption about the household size of households in the lower income quintile that is unknowable for publicly available Census Geographies other than Public Use Microdata Areas, which can only be representative for a small number of large-city utilities. 
+
+However, its 4-level qualitative scale could be easily converted into a color scale/gage/stoplight, and is easily calculated from US Block Group level data. 
+
+##### Approach 2: Ratio of aggregate basic water service bills to aggregate income for the bottom quintile. 
+
+In order to make the affordability metric less dependent on an unreliable point estimate of household size, the figure can instead be calculated as
+the ratio of total basic water/sewer costs to total income (B19025) from households under the 20th (for overall area) percentile of income  (B19082), assuming the distribution of household size is similar for the lower quintile of household income as the entire distribution of income. Alternatively could calculate this distribution from any intersecting PUMAs. 
+
+That is, from the U.S. Census, we procure the count of households in the service area of each household size from 1 to 7+ persons. We then assign to each household a monthly consumption corresponding to 5- GPCD, and calculate the resulting water and sewer bill according to the utility rate structure. 
+
+We then calculate the LQI as in Approach 1. Based on the household income bracket counts, we estimate the number of households in the community-wide bottom income quintile in each tract. We then sum up the basic water/sewer bills in each tract, and divide by the aggregate income of the bottom quintile of household income. 
+
+* Supplement: Calculate this figure, but subtracting the value of any CAP subsidies from the numerator. 
+* Supplement: Proportion of HH cut off due to nonpayment at least once/twice last year (by tract)
+
+### Pillar 2: Workforce and Economic Development Benefits
+
+* Number Staff living in service area/tract
+
+* Aggregate pay/benefits accruing to staff living within service area/ tract (???)
+
+* Diversity requirements in hiring
+
+* Diversity requirements in procurement
+
+* Local requirements for procurement/contracting
+
+* Participation in local education, training and workforce development programs
+  - Binary
+  - Trainees engaged with
+
+### Pillar 3: Resilience and Investment
+
+#### Planning and Assessment
+
+* Number Community water planning meetings (in each Tract)
+
+* Proportion of community water planning meeting attendance (per tract)
+
+* Utility Resilience Index (URI) 
+![URI](uri.png)
+ - Perhaps omitting the Unemployment and Median income indicators, which could be redundant with Pillar 1. 
+
+#### Infrastructure Conditions
+
+* Proportion structures with lead service lines (by tract)
+
+* Water main breaks/length pipe (by tract)
+
+* Sewer overflows (by tract)
+
+* Infrastructure Leakage Index (by DMA -> summarize over Census Tract if possible)
+
+#### Asset management investments
+
+
+
+
 
 ## Source data
 
@@ -61,7 +164,7 @@ tidycensus::census_api_key("b25f8b1b7bf10561c9cbc3a20a4d2572677f1f05")
 options(tigris_use_cache = TRUE) 
 ```
 
-```{r, results="hide", warning=FALSE, message=FALSE}
+```{r, results="hide", warning=FALSE, message=FALSE, eval=FALSE}
 #tidycensus::census_api_key("key goes here") #set census API key
 vars <- tidycensus::load_variables(2019, "acs5", cache = TRUE) # download all possible variables
 
@@ -313,6 +416,15 @@ cv <- c(pop_race_count = "B01001_001",
         hh_inc_more_100k_rent_40_49.9perc = "B25074_062",
         hh_inc_more_100k_rent_more_50perc = "B25074_063",
         hh_inc_more_100k_rent_notComputed = "B25074_064",
+        hh_income_aggregate = "B19025_001",
+        hh_income_aggregate_share_Q1 = "B19082_001",
+        hh_income_aggregate_share_Q2 = "B19082_002",
+        hh_income_aggregate_share_Q3 = "B19082_003",
+        hh_income_aggregate_share_Q4 = "B19082_004",
+        hh_income_aggregate_share_Q5 = "B19082_005",
+        hh_income_aggregate_share_Top5 = "B19082_006"
+        
+        
                  )
 
 ## Download all counties, and ifnd counties that intersect the boundary
@@ -331,7 +443,7 @@ ct <- unique(substr(counties$GEOID,3,5))
 # tracts from the state/county the boundary intersects
 
 
-tracts <- tidycensus::get_acs(year=2019,
+tracts.w <- tidycensus::get_acs(year=2019,
                               geography = "tract",
                               variables = cv,
                               geometry = TRUE,
@@ -341,14 +453,28 @@ tracts <- tidycensus::get_acs(year=2019,
   sf::st_transform(4326) %>%
   dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
 
+tracts.l <- tidycensus::get_acs(year=2019,
+                              geography = "tract",
+                              variables = cv,
+                              geometry = TRUE,
+                              state = st,
+                              county = ct) %>% 
+  sf::st_transform(4326) %>%
+  dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
 
-# st_write(tracts,"../data/tracts.geojson", append=FALSE)
-# write.csv(st_drop_geometry(tracts),"../data/tracts.csv")
+
+
+ st_write(tracts.w,"../data/tracts_wide.geojson", append=FALSE)
+ write.csv(st_drop_geometry(tracts.w),"../data/tracts_wide.csv")
+ 
+ 
+ st_write(tracts.l,"../data/tracts_long.geojson", append=FALSE)
+ write.csv(st_drop_geometry(tracts.l),"../data/tracts_long.csv")
 
 # Get data for census block groups intersecting the boundary, having first gotten only
 # block groups from the state/county the boundary intersects
 
-bg <- tidycensus::get_acs(year=2019,
+bg.w <- tidycensus::get_acs(year=2019,
                           geography = "block group",
                           variables = cv,
                           geometry = TRUE,
@@ -358,8 +484,45 @@ bg <- tidycensus::get_acs(year=2019,
   sf::st_transform(4326) %>%
   dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
 
-# st_write(bg,"../data/blockgroups.geojson", append=FALSE)
-# write.csv(st_drop_geometry(bg),"../data/blockgroups.csv")
+bg.l <- tidycensus::get_acs(year=2019,
+                          geography = "block group",
+                          variables = cv,
+                          geometry = TRUE,
+                          state = st,
+                          county = ct) %>% 
+  sf::st_transform(4326) %>%
+  dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
+
+st_write(bg.w,"../data/blockgroups_wide.geojson", append=FALSE)
+write.csv(st_drop_geometry(bg.w),"../data/blockgroups_wide.csv")
+
+
+st_write(bg.l,"../data/blockgroups_long.geojson", append=FALSE)
+write.csv(st_drop_geometry(bg.l),"../data/blockgroups_long.csv")
+
+pl.w <- tidycensus::get_acs(year=2019,
+                          geography = "place",
+                          variables = cv,
+                          geometry = TRUE,
+                          state = st,
+                          output = "wide")  %>% 
+  sf::st_transform(4326) %>%
+  dplyr::filter(GEOID == 1751622)
+
+pl.l <- tidycensus::get_acs(year=2019,
+                          geography = "place",
+                          variables = cv,
+                          geometry = TRUE,
+                          state = st,
+                          output = "wide")  %>% 
+  sf::st_transform(4326) %>%
+  dplyr::filter(GEOID == 1751622)
+
+st_write(pl.w,"../data/place_wide.geojson", append=FALSE)
+write.csv(st_drop_geometry(pl.w),"../data/place_wide.csv")
+
+st_write(pl.l,"../data/place_long.geojson", append=FALSE)
+write.csv(st_drop_geometry(pl.l),"../data/place_long.csv")
 
 
 ```
@@ -373,17 +536,22 @@ The data can be further manipulated and visualized, for example, below we compar
 
 
 ```{r, include=FALSE, echo=FALSE}
-bg$perc_white = 100*bg$pop_race_whiteE/bg$pop_race_countE
-tracts$perc_white = 100*tracts$pop_race_whiteE/tracts$pop_race_countE
 
-bg$housing_unit_median_year_built_overallE[which(bg$housing_unit_median_year_built_overallE==0)] <-NA
+bg.w <- sf::read_sf("../data/blockgroups_wide.geojson")
+tracts.w <- sf::read_sf("../data/tracts_wide.geojson")
+boundary <- sf::read_sf("../data/boundary.geojson")
 
-tracts$housing_unit_median_year_built_overallE[which(tracts$housing_unit_median_year_built_overallE==0)] <-NA
+bg.w$perc_white = 100*bg.w$pop_race_whiteE/bg.w$pop_race_countE
+tracts.w$perc_white = 100*tracts.w$pop_race_whiteE/tracts.w$pop_race_countE
+
+bg.w$housing_unit_median_year_built_overallE[which(bg.w$housing_unit_median_year_built_overallE==0)] <-NA
+
+tracts.w$housing_unit_median_year_built_overallE[which(tracts.w$housing_unit_median_year_built_overallE==0)] <-NA
 
 ```
 
 ```{r, results="asis", echo=FALSE, message=FALSE}
-bg.white.map <- mapview(select(bg,perc_white),
+bg.white.map <- mapview(select(bg.w,perc_white),
                         zcol="perc_white",
                         layer.name="% Pop. White </br> Census Block Groups") + 
   mapview(boundary,
@@ -391,7 +559,7 @@ bg.white.map <- mapview(select(bg,perc_white),
           col.regions="red",alpha.regions=0,
           stroke=TRUE, color="red", lwd=2)
 
-tracts.white.map <- mapview(select(tracts,perc_white),
+tracts.white.map <- mapview(select(tracts.w,perc_white),
                             zcol="perc_white",
                             layer.name="% Pop. White </br> Census Tracts") + 
   mapview(boundary,
@@ -399,7 +567,7 @@ tracts.white.map <- mapview(select(tracts,perc_white),
           col.regions="red",alpha.regions=0,
           stroke=TRUE, color="red", lwd=2)
 
-bg.yearbuilt.map <- mapview(select(bg,housing_unit_median_year_built_overallE),
+bg.yearbuilt.map <- mapview(select(bg.w,housing_unit_median_year_built_overallE),
                         zcol="housing_unit_median_year_built_overallE",
                         layer.name="Median Year Built </br> Census Block Groups") + 
   mapview(boundary,
@@ -407,7 +575,7 @@ bg.yearbuilt.map <- mapview(select(bg,housing_unit_median_year_built_overallE),
           col.regions="red",alpha.regions=0,
           stroke=TRUE, color="red", lwd=2)
 
-tracts.yearbuilt.map <- mapview(select(tracts,housing_unit_median_year_built_overallE),
+tracts.yearbuilt.map <- mapview(select(tracts.w,housing_unit_median_year_built_overallE),
                         zcol="housing_unit_median_year_built_overallE",
                         layer.name="Median Year Built </br> Census Tracts") + 
   mapview(boundary,
@@ -482,46 +650,3 @@ samp <- samp %>% filter(objectid %in% ids)
 mapview(boundary,alpha.regions=0,col.regions="black",stroke=TRUE,color="black",lwd=3) + mapview(mains,color="blue") + mapview(samp,col.regions="red",color="red",layer.name="Sample Locations")
 
 ```
-
-
-## Develop and simulate Water Equity Lens indicators
-
-### Pillar 1: Access, Affordability, and Water Quality 
-
-Pillar 1 focuses on access to affordable and high quality water and sewer services. 
-
-
-#### Quality of service
-
-*Proportion of households that have been affected by at least 1 service interruption
-
-*Proportion of households that have been affected by at least 1 boil water advisory
-
-*Proportion of households that have been affected by at least 1 health-based SDWA violation
-
-#### Affordability
-
-The ideal affordability measure would be the proportion of households in the service area for whom the annual expenditures on water and sewer services (net of any customer assistance program subsidies) exceeded some threshold percent value of their annual income, which could be tailored to neighborhoods based on cost of living. However, without household-level data, or even detailed cross-tabulations of household income and size, such a measure is impossible to calculate with a reliable degree of accuracy.
-
-* Approach 1: HBI/PPI
-
-One approach was developed for AWWA, NACQA, and WEF. It is elaborated in [this report](https://raw.githubusercontent.com/ksonda/water-equity-lens/draft1/literature/DevelopingNewFrameworkForAffordabilityReport.pdf?token=AKQHTNUSCBCKR3XAIOECHDTAE3YYG) 
-
-![HBI/PPI](https://raw.githubusercontent.com/ksonda/water-equity-lens/draft1/doc/tab32.png?token=AKQHTNSF6UUWMCCPOFQY4VDAE3WJY)
-
-Its 4-level qualitative scale could be easily converted into a color scale/gage/stoplight, and is easily calculated from US Block Group. 
-
-* Approach 2: Proportion renting HH whose bills are likely above 10% of their income net of gross rent/ housing costs. 
-
-* Whether there is a CAP program
-* Ratio of HH in CAP program to HH on TANF/SNAP
-* Proportion of HH cut off due to nonpayment at least once/twice
-
-### Pillar 2: Workforce and Economic Development Benefits
-
-### Pillar 3: Resilience and Investment
-
-* Proprtion structures with lead service lines
-
-* 
-
