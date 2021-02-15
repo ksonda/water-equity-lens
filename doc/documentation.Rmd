@@ -81,9 +81,9 @@ However, its 4-level qualitative scale could be easily converted into a color sc
 In order to make the affordability metric less dependent on an unreliable point estimate of household size, the figure can instead be calculated as
 the ratio of total basic water/sewer costs to total income (B19025) from households under the 20th (for overall area) percentile of income  (B19082), assuming the distribution of household size is similar for the lower quintile of household income as the entire distribution of income. Alternatively could calculate this distribution from any intersecting PUMAs. 
 
-That is, from the U.S. Census, we procure the count of households in the service area of each household size from 1 to 7+ persons. We then assign to each household a monthly consumption corresponding to 5- GPCD, and calculate the resulting water and sewer bill according to the utility rate structure. 
+That is, from the U.S. Census, we procure the count of households in the service area of each household size from 1 to 7+ persons. We then assign to each household a monthly consumption corresponding to 50 GPCD, and calculate the resulting water and sewer bill according to the utility rate structure. 
 
-We then calculate the LQI as in Approach 1. Based on the household income bracket counts, we estimate the number of households in the community-wide bottom income quintile in each tract. We then sum up the basic water/sewer bills in each tract, and divide by the aggregate income of the bottom quintile of household income. 
+We then calculate the LQI as in Approach 1. Based on the household income bracket counts, we estimate the number of households with incomes below the community-wide bottom income quintile upper limit in each tract. We then sum up the basic water/sewer bills in each tract, and divide by the aggregate income of the bottom quintile of household income. 
 
 * Supplement: Calculate this figure, but subtracting the value of any CAP subsidies from the numerator. 
 * Supplement: Proportion of HH cut off due to nonpayment at least once/twice last year (by tract)
@@ -112,9 +112,10 @@ We then calculate the LQI as in Approach 1. Based on the household income bracke
 
 * Proportion of community water planning meeting attendance (per tract)
 
-* Utility Resilience Index (URI) 
+* Utility Resilience Index (URI e.g. acute disasters) 
 ![URI](uri.png)
  - Perhaps omitting the Unemployment and Median income indicators, which could be redundant with Pillar 1. 
+ - Perhaps adding in variable for Drought/ Water Shortage contingency plan
 
 #### Infrastructure Conditions
 
@@ -126,9 +127,19 @@ We then calculate the LQI as in Approach 1. Based on the household income bracke
 
 * Infrastructure Leakage Index (by DMA -> summarize over Census Tract if possible)
 
+* Water quality complaints received/ addressed (by tract)
+
 #### Asset management investments
 
+- Lead service line replacements (proportion of lead service lines by tract)
 
+- Number leaks detected (by tract)
+
+- Expenditure incurred for detection measures
+
+- Infrastructure repair/rehabilitation/replacement expenditure (by tract) 
+
+- Real losses reduced due to repairs/rehab/replacement (by tract)
 
 
 
