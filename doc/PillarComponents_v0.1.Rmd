@@ -1,0 +1,96 @@
+---
+title: "Xylem Water Equity Lens Pillars and Components v0.1"
+author: 
+  - Kyle Onda^[kyle.onda@gmail.com]
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    code_folding: hide
+    fig_width: 8
+    fig_height: 8
+    theme: readable
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+library(webshot)
+library(tidycensus)
+library(mapview)
+library(leafsync)
+library(esri2sf)
+library(plotly)
+library(ggthemes)
+```
+
+
+## Introduction
+
+This document shows how to calculate candidate Pillars and their constituent Indicators at Census Block Group, Tract, and Service Area/ Municipality level. Here, we load the data we pre-processed in [the previous exercise](documentation.html)
+
+```{r dataload, results="hide"}
+b <- read_sf("../data/boundary.geojson")
+bg.l <- read_sf("../data/blockgroups_long.geojson")
+bg.w <- read_sf("../data/blockgroups_wide.geojson")
+tr.l <- read_sf("../data/tracts_long.geojson")
+tr.w <- read_sf("../data/tracts_wide.geojson")
+pl.w <- read_sf("../data/place_wide.geojson")
+pl.l <- read_sf("../data/place_long.geojson")
+lead <- read_sf("../data/parcels_lead_service_lines.geojson")
+
+calculate_volume <- function(hh_size = 4, gpcd = 50){
+  vol = hh_size * gpcd * 30
+  return(vol)  
+}
+
+calculate_bill <- function(volume = 6000){
+  fixed_charges = 7.63 + 9.85 + 1.8
+  vol_rate = 5.76 + 2.71 
+  bill = fixed_charges+ (vol_rate*volume)/748.052
+  return(bill)
+}
+
+save.image("../cache/components_prep.RData")
+
+```
+
+## Pillar 1 | Access: Affordability and Service Quality
+
+### 1.1 Affordability
+
+#### 1.1.1 HBI/PPI Matrix
+
+We adopt the approach in the figure below, as elaborated in [this report]().
+
+#### 1.1.2 Cutoffs
+
+
+#### 1.1.3 Customer Assitance Program
+
+### 1.2 Water Quality
+
+#### 1.2.1 Service Interruptions
+
+#### 1.2.2 Boil water advisories
+
+#### 1.2.3 Health-based SDWA violations
+
+
+## Pillar 2 | Economic and Workforce Development Contributions
+
+
+## Pillar 3: Resilience and Asset Management
+
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
