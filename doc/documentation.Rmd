@@ -433,7 +433,14 @@ cv <- c(pop_race_count = "B01001_001",
         hh_income_aggregate_share_Q3 = "B19082_003",
         hh_income_aggregate_share_Q4 = "B19082_004",
         hh_income_aggregate_share_Q5 = "B19082_005",
-        hh_income_aggregate_share_Top5 = "B19082_006"
+        hh_income_aggregate_share_Top5 = "B19082_006",
+        hh_income_upper_limit_Q1 = "B19080_001",
+        hh_income_upper_limit_Q2 = "B19080_002",
+        hh_income_upper_limit_Q3 = "B19080_003",
+        hh_income_upper_limit_Q4 = "B19080_004",
+        hh_income_lower_limit_Top5 = "B19080_005",
+        inc_poverty_count = "C17002_001",
+        inc_poverty_count_gr2 = "C17002_008"
         
         
                  )
@@ -524,8 +531,7 @@ pl.l <- tidycensus::get_acs(year=2019,
                           geography = "place",
                           variables = cv,
                           geometry = TRUE,
-                          state = st,
-                          output = "wide")  %>% 
+                          state = st)  %>% 
   sf::st_transform(4326) %>%
   dplyr::filter(GEOID == 1751622)
 
