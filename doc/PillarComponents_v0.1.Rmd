@@ -513,7 +513,7 @@ P3_tract <- P3_tract %>% st_drop_geometry()
 write.csv(P3_tract,"../out/P3_tract.csv")
 write.csv(P3_overall,"../out/P3_overall.csv")
 ```
-# Overall Tract-level map
+## Overall Tract-level map
 
 Below you can compare any two attributes side-by-side by selecting the appropriate layers in the layer control icon of each map in the upper left. 
 
