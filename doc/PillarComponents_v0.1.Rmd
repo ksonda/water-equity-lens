@@ -332,29 +332,198 @@ In this case, the API call for Naperville involves the PWSID `IL0434670`:
 `https://enviro.edap-cluster.com/cache/query/enviro3/efservice/VIOLATION/PWSID/IL0434670/IS_HEALTH_BASED_IND/Y/ROWS/0:100/JSON`
 
 
+In this case, there are no health-based violations in the past 10 years, so the value of the indicator is 0.
+
+Below we export the Pillar 1 indicators. 
+
 ```{r export_pillar_1}
 P1_tract <- select(P1,-pop_owner_occupied_unitsE,-pop_educ_attainment_countE,-pop_rental_unitsE,-pop_educ_bachelorE,-pop_educ_masterE,-pop_educ_docE,-pop_educ_profE)
-st_write(P1_tract,"../out/P1_tract.geojson")
+st_write(P1_tract,"../out/P1_tract.geojson",append=FALSE)
+write.csv(st_drop_geometry(P1_tract),"../out/P1_tract.csv")
 
-P1_overall <- summarise_all(P1_tract,mean)
 
+P1_overall <- P1_tract %>% st_drop_geometry() %>% summarise(across(c(HBI_size_avg:hh_income_upper_limit_Q1E,Incentive_rate:boil_rate,Cutoff_Perc:CAP_Perc),~weighted.mean(.,w=hh_type_total_countE))) %>% mutate(health_based_sdwa_violations=0)
 
+write.csv(P1_overall,"../out/P1_overall.csv")
 
 
 ```
 
-In this case, there are no health-based violations in the past 10 years, so the value of the indicator is 0.
 
 ## Pillar 2 | Economic and Workforce Development Contributions
 
+### Tract and Overall Level
+
+* Number Staff living in service area/tract
+
+```{r workforce_tract}
+P2_tract <- tr.w %>% 
+  select(NAME,GEOID,hh_type_total_countE) %>% 
+  mutate(staff_count = round(runif(length(NAME),min=0,max=10),0),
+         staff_per_1000hh = 1000*staff_count/hh_type_total_countE)
+
+P2_overall <- P2_tract %>% st_drop_geometry %>% summarize(staff_count_in_service_area = sum(staff_count),
+                                                          staff_per_1000hh = sum(staff_count)/sum(hh_type_total_countE))
+
+P2_overall$staff_total<-300
+
+```
+
+  
+### Overall level Only  
+
+* Diversity requirements in hiring
+
+* Diversity requirements in procurement
+
+* Local requirements for procurement/contracting
+
+* Participation in local education, training and workforce development programs
+  - Binary
+  - Trainees engaged with
+
+```{r workforce_overall}
+set.seed(35455)
+P2_overall <- P2_overall %>% 
+  mutate(require_diverse_hiring = rbinom(1,1,0.5),
+  require_diverse_procurement = rbinom(1,1,0.5),
+  require_local_procurement = rbinom(1,1,0.5),
+  regional_training_education_programs = round(runif(1, min=0,max=5)),
+  region_training_education_participation = round(runif(1,min=0,max=100))
+                       )
+
+```
+
+Below we export the Pillar 2 inidicators in a standardized format.
+
+```{r export_p2}
+st_write(P2_tract,"../out/P2_tract.geojson",append=FALSE)
+P2_tract <- st_drop_geometry(P2_tract)
+write.csv(P2_tract,"../out/P2_tract.csv")
+write.csv(P2_overall,"../out/P2_overall.csv")
+```
 
 ## Pillar 3: Resilience and Asset Management
 
+### Tract and Overall Level
+
+* Number Community water planning meetings (in each Tract)
+
+* Proportion structures with lead service lines (by tract)
+
+* Water main breaks/length pipe (by tract)
+
+* Sewer overflows (by tract)
+
+* Water quality complaints received/ addressed (by tract)
 
 
+- Lead service line replacements (proportion of lead service lines by tract)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+- Number leaks detected (by tract)
+- Expenditure incurred for detection measures
+
+- Infrastructure repair/rehabilitation/replacement expenditure (by tract) 
+
+- Real losses reduced due to repairs/rehab/replacement (by tract)
+
+```{r P3_tract_level}
+P3 <- tr.w %>% 
+  select(NAME,GEOID,hh_type_total_countE) 
+
+P3.c <- st_join(P3,lead.c)
+P3.c <- P3.c %>% mutate(water_quality_complaints_received = rbinom(length(GEOID),1,0.08),
+                    water_quality_complaints_resolved = water_quality_complaints_received*rbinom(length(GEOID),1,0.9),
+                    ft_mains = runif(length(GEOID),55,164),
+                    lead_line = as.numeric(SUBTYPE=="LEAD")) 
+
+P3_tract <- P3.c %>% st_drop_geometry() %>%
+  group_by(GEOID,NAME,hh_type_total_countE) %>% add_tally() %>% 
+  summarize(conn = mean(n),
+            water_quality_complaints_received = sum(water_quality_complaints_received),
+            water_quality_complaints_resolved = sum(water_quality_complaints_resolved),
+            ft_mains = sum(ft_mains),
+            lead_lines = sum(lead_line,na.rm=TRUE)) %>%ungroup()
+
+P3_tract <- P3_tract %>% 
+  mutate(meeting_count = round(runif(1, min=0,max=4)),
+         meeting_count_1000hh = meeting_count/hh_type_total_countE,
+         main_breaks = floor(runif(length(GEOID),min=0,max=3)),
+         main_breaks_1000ft_pipe = main_breaks/(ft_mains/1000),
+         prop_lead_lines = lead_lines/conn,
+         leaks_detected = floor(runif(length(GEOID),min=main_breaks, max = 10)),
+         prop_lead_lines_replaced = case_when(lead_lines > 0 ~ runif(1,min=0,max=1),
+                                              lead_lines == 0 ~ NA_real_),
+         sewer_overflows = floor(runif(length(GEOID), min=0, max=2)),
+         leak_detection_expenditure = runif(length(GEOID),min=0,max=1000000),
+         network_renewal_percent = runif(length(GEOID),min=0,max=20),
+         network_renewal_expenditure =runif(length(GEOID),min=0,max=1000) * network_renewal_percent,
+         real_losses_percent_delivered =  runif(length(GEOID),min=0,max=100),
+         real_loss_reduction_percent = case_when(real_losses_percent_delivered > 5 ~ runif(length(GEOID),min=0,max=95),
+                                                 real_losses_percent_delivered <= 5 ~ runif(length(GEOID),min=0,max=50))
+         
+         
+         ) 
+         
+         
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+### Overall Level Only
+
+* Utility Resilience Index (URI)
+
+* Infrastructure Leakage Index (by DMA -> summarize over Census Tract if possible)
+```{r P3_overall}
+P3_overall <- P3_tract %>% 
+  summarize(hh = sum(hh_type_total_countE),
+            conn = sum(conn),
+            meeting_count = sum(meeting_count),
+            main_breaks = sum(main_breaks),
+            ft_mains = sum(ft_mains),
+            lead_lines = sum(lead_lines),
+            leaks_detected = sum(leaks_detected),
+            lead_lines_replaced = mean(prop_lead_lines_replaced,na.rm=TRUE),
+            sewer_overflows = sum(sewer_overflows)
+           # network_renewal_percent2 = weighted.mean(x=network_renewal_percent,w=ft_mains,na.rm=TRUE),
+            #real_losses_percent_delivered2 = weighted.mean(x=real_losses_percent_delivered,w=conn,na.rm=TRUE),
+            #real_loss_reduction_percent2 = weighted.mean(x=real_losses_reduction_percent,w=conn,na.rm=TRUE)
+            ) 
+P3_overall <- P3_overall %>%  mutate(
+            URI = floor(runif(1, min=0, max=100)),
+            ILI = runif(1,min=1,max=4),
+            prop_lead_lines = lead_lines/conn,
+            breaks_per_1000ft = main_breaks/(ft_mains/1000),
+            leaks_per_1000ft = leaks_detected/(ft_mains/1000),
+            sewer_overflows_per_1000conn = sewer_overflows/conn
+)
+
+P3_overall$network_renewal_percent = weighted.mean(x=P3_tract$network_renewal_percent,w=P3_tract$ft_mains,na.rm=TRUE)
+P3_overall$real_losses_percent_delivered = weighted.mean(x=P3_tract$real_losses_percent_delivered,w=P3_tract$conn,na.rm=TRUE)
+P3_overall$real_loss_reduction_percent = weighted.mean(x=P3_tract$real_loss_reduction_percent,w=P3_tract$conn,na.rm=TRUE)
+
+P3_tract <- left_join(P3,P3_tract,by=c("GEOID","NAME","hh_type_total_countE"))
+```
+
+Below we export the Pillar 3 indicators
+
+```{r export_P3}
+st_write(P3_tract,"../out/P3_tract.geojson",append=FALSE)
+P3_tract <- P3_tract %>% st_drop_geometry()
+write.csv(P3_tract,"../out/P3_tract.csv")
+write.csv(P3_overall,"../out/P3_overall.csv")
+```
+# Overall Tract-level map
+
+Below you can compare any two attributes side-by-side by selecting the appropriate layers in the layer control icon of each map in the upper left. 
+
+```{r}
+tracts <- left_join(P1_tract,P2_tract,by=c("GEOID","NAME"))
+tracts <- left_join(tracts,P3_tract,by=c("GEOID","NAME"))
+tracts <- select(tracts,-GEOID,-NAME)
+
+t1 <- mapview(tracts,burst=TRUE,homebutton=FALSE) + mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+
+sync(t1,t1,ncol=1)
+```
+
