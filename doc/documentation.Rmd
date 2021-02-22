@@ -88,6 +88,7 @@ We then calculate the LQI as in Approach 1. Based on the household income bracke
 * Supplement: Calculate this figure, but subtracting the value of any CAP subsidies from the numerator. 
 * Supplement: Proportion of HH cut off due to nonpayment at least once/twice last year (by tract)
 
+
 ### Pillar 2: Workforce and Economic Development Benefits
 
 * Number Staff living in service area/tract
@@ -106,7 +107,7 @@ We then calculate the LQI as in Approach 1. Based on the household income bracke
 
 ### Pillar 3: Resilience and Investment
 
-#### Planning and Assessment
+#### 3.1 Planning and Assessment
 
 * Number Community water planning meetings (in each Tract)
 
