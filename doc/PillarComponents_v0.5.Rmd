@@ -120,7 +120,7 @@ P1_tract$Grade_AFF_7 <- p1_grade_hbi_ppi(P1_tract$aff_grade_7)
 
 #### HBI/PPI Chicago Rate
 
-Neverming, still "Low". But hey, [what would you expect.](https://www.chicagotribune.com/suburbs/naperville-sun/ct-nvs-naperville-wealthiest-city-midwest-st-0525-20160523-story.html), the median household income of Naperville is ~ \$125,000 , compared to $63,000 for the Chicaga MSA. To account for this for this demonstration exercise, we construct an alternative HBI/PPI indicator, that essentially halves the thresholds for our color code 
+Neverming, still "Low". But hey, [what would you expect.](https://www.chicagotribune.com/suburbs/naperville-sun/ct-nvs-naperville-wealthiest-city-midwest-st-0525-20160523-story.html), the median household income of Naperville is ~ \$125,000 , compared to $63,000 for the Chicago MSA. To account for this for this demonstration exercise, we construct an alternative HBI/PPI indicator, that essentially halves the thresholds for our color code 
 
 
 ```{r}
