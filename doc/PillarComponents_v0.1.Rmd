@@ -525,5 +525,7 @@ tracts <- select(tracts,-GEOID,-NAME)
 t1 <- mapview(tracts,burst=TRUE,homebutton=FALSE) + mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
 
 sync(t1,t1,ncol=1)
+
+save.image("../cache/indicators_ungraded.RData")
 ```
 

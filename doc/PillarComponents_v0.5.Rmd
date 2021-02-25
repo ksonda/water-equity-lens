@@ -1,0 +1,132 @@
+---
+title: "PillarComponents_v0.5"
+author: 
+  - Kyle Onda^[kyle.onda@gmail.com]
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    code_folding: hide
+    fig_width: 8
+    fig_height: 8
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sf)
+library(tidyverse)
+library(mapview)
+library(RColorBrewer)
+library(viridisLite)
+
+calculate_volume <- function(hh_size = 4, gpcd = 50){
+  vol = hh_size * gpcd * 30
+  return(vol)  
+}
+
+calculate_bill <- function(volume = 6000){
+  fixed_charges = 7.63 + 9.85 + 1.8
+  vol_rate = 5.76 + 2.71 
+  bill = fixed_charges+ (vol_rate*volume)/748.052
+  return(bill)
+}
+
+
+
+gradeAffordability <-function(HBI,PPI){
+ grade <- NA
+ grade <- dplyr::case_when(
+    HBI < 7 & PPI < 20 ~ "Low Burden",
+    HBI < 7 & PPI>=20 & PPI <35 ~ "Moderate-Low Burden",
+    HBI < 7 & PPI >=35 ~ "Moderate-High Burden",
+    HBI >= 7 & HBI < 10 & PPI >= 35 ~ "High Burden",
+    HBI >= 7 & HBI < 10 & PPI >= 20 & PPI < 35 ~ "Moderate-High Burden",
+    HBI >= 7 & HBI < 10 & PPI < 20 ~ "Moderate-Low Burden",
+    HBI >= 10 & PPI >= 35 ~ "Very High Burden",
+    HBI >= 10 & PPI >= 20 & PPI < 35 ~ "High Burden",
+    HBI >= 10 & PPI < 20 ~ "Moderate-High Burden"
+  )
+  return(grade)
+  
+}
+
+load("../cache/indicators_ungraded.RData")
+```
+
+## Indicator grades
+
+For each indicator, we set thresholds for "Poor", "Fair", and "Good" performance, set such that "Fair" corresponds to a wide range within a normal distribution of outcomes. 
+
+### Pillar 1
+
+#### HBI/PPI Affordability (real rate)
+```{r}
+p1_grade_hbi <- function(x){
+  grade <- NA
+  grade <- dplyr::case_when(
+    x < 7 ~ "Good",
+    x >= 7 & x < 10 ~ "Fair",
+    x >= 10 ~ "Poor"
+  )
+  return(grade)
+}
+
+
+p1_grade_ppi <- function(x){
+  grade <- NA
+  grade <- dplyr::case_when(
+    x < 20 ~ "Good",
+    x >= 20 & x < 35 ~ "Fair",
+    x >= 35 ~ "Poor"
+  )
+  return(grade)
+}
+
+
+p1_grade_hbi_ppi <- function(x){
+  grade <- NA
+  grade <- dplyr::case_when(
+    x == "Low Burden" ~ "Good",
+    x == "Moderate-Low Burden" ~ "Fair",
+    x == "Moderate-High Burden" ~ "Fair",
+    x == "High Burden" ~ "Poor",
+    x == "Very High Burden" ~ "Poor"
+    
+  )
+  return(grade)
+}
+
+P1_overall$Grade_PPI <- p1_grade_ppi(P1_overall$PPI)
+P1_tract$Grade_PPI <- p1_grade_ppi(P1_tract$PPI)
+
+P1_overall$Grade_HBI <- p1_grade_hbi(P1_overall$HBI)
+P1_tract$Grade_HBI <- p1_grade_hbi(P1_tract$HBI)
+
+P1_overall$Grade_AFF <- p1_grade_hbi_ppi(P1_overall$HBI)
+P1_tract$Grade_AFF_avg <- p1_grade_hbi_ppi(P1_tract$aff_grade_avg)
+P1_tract$Grade_AFF_1 <- p1_grade_hbi_ppi(P1_tract$aff_grade_1)
+P1_tract$Grade_AFF_2 <- p1_grade_hbi_ppi(P1_tract$aff_grade_2)
+P1_tract$Grade_AFF_3 <- p1_grade_hbi_ppi(P1_tract$aff_grade_3)
+P1_tract$Grade_AFF_4 <- p1_grade_hbi_ppi(P1_tract$aff_grade_4)
+P1_tract$Grade_AFF_5 <- p1_grade_hbi_ppi(P1_tract$aff_grade_5)
+P1_tract$Grade_AFF_6 <- p1_grade_hbi_ppi(P1_tract$aff_grade_6)
+P1_tract$Grade_AFF_7 <- p1_grade_hbi_ppi(P1_tract$aff_grade_7)
+
+
+```
+
+#### HBI/PPI Chicago Rate
+
+Neverming, still "Low". But hey, [what would you expect.](https://www.chicagotribune.com/suburbs/naperville-sun/ct-nvs-naperville-wealthiest-city-midwest-st-0525-20160523-story.html), the median household income of Naperville is ~ \$125,000 , compared to $63,000 for the Chicaga MSA. To account for this for this demonstration exercise, we construct an alternative HBI/PPI indicator, that essentially halves the thresholds for our color code 
+
+
+```{r}
+
+P1_overall$HBI_size_avg_alternate <- 100 * 12 * calculate_bill_allegheny(volume=calculate_volume(hh_size = pl.w$hh_size_avg_overallE))/P1_overall$hh_income_upper_limit_Q1E
+
+P1_tract$HBI_size_avg_alternate <- 100 * 12 * calculate_bill_allegheny(volume=calculate_volume(hh_size = P1_tract$hh_size_avg_overallE))/P1_tract$hh_income_upper_limit_Q1E
+
+```
