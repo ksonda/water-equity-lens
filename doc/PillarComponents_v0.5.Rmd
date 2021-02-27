@@ -21,6 +21,7 @@ library(tidyverse)
 library(mapview)
 library(RColorBrewer)
 library(viridisLite)
+library(leafsync)
 
 calculate_volume <- function(hh_size = 4, gpcd = 50){
   vol = hh_size * gpcd * 30
@@ -62,7 +63,9 @@ For each indicator, we set thresholds for "Poor", "Fair", and "Good" performance
 
 ### Pillar 1
 
-#### HBI/PPI Affordability (real rate)
+#### Tract-level
+
+##### HBI/PPI Affordability (real rate)
 ```{r}
 p1_grade_hbi <- function(x){
   grade <- NA
@@ -102,10 +105,10 @@ p1_grade_hbi_ppi <- function(x){
 P1_overall$Grade_PPI <- p1_grade_ppi(P1_overall$PPI)
 P1_tract$Grade_PPI <- p1_grade_ppi(P1_tract$PPI)
 
-P1_overall$Grade_HBI <- p1_grade_hbi(P1_overall$HBI)
-P1_tract$Grade_HBI <- p1_grade_hbi(P1_tract$HBI)
+P1_overall$Grade_HBI <- p1_grade_hbi(P1_overall$HBI_size_avg)
+P1_tract$Grade_HBI <- p1_grade_hbi(P1_tract$HBI_size_avg)
 
-P1_overall$Grade_AFF <- p1_grade_hbi_ppi(P1_overall$HBI)
+P1_overall$Grade_AFF <- p1_grade_hbi_ppi(P1_overall$HBI_size_avg)
 P1_tract$Grade_AFF_avg <- p1_grade_hbi_ppi(P1_tract$aff_grade_avg)
 P1_tract$Grade_AFF_1 <- p1_grade_hbi_ppi(P1_tract$aff_grade_1)
 P1_tract$Grade_AFF_2 <- p1_grade_hbi_ppi(P1_tract$aff_grade_2)
@@ -118,15 +121,239 @@ P1_tract$Grade_AFF_7 <- p1_grade_hbi_ppi(P1_tract$aff_grade_7)
 
 ```
 
-#### HBI/PPI Chicago Rate
-
-Neverming, still "Low". But hey, [what would you expect.](https://www.chicagotribune.com/suburbs/naperville-sun/ct-nvs-naperville-wealthiest-city-midwest-st-0525-20160523-story.html), the median household income of Naperville is ~ \$125,000 , compared to $63,000 for the Chicago MSA. To account for this for this demonstration exercise, we construct an alternative HBI/PPI indicator, that essentially halves the thresholds for our color code 
 
 
-```{r}
 
-P1_overall$HBI_size_avg_alternate <- 100 * 12 * calculate_bill_allegheny(volume=calculate_volume(hh_size = pl.w$hh_size_avg_overallE))/P1_overall$hh_income_upper_limit_Q1E
+Both overall and across all census tracts, the affordability of water and sewer in Naperville can be characterized as "Good". Naperville is [the wealthiest community in the Midwest](https://www.chicagotribune.com/suburbs/naperville-sun/ct-nvs-naperville-wealthiest-city-midwest-st-0525-20160523-story.html), so this might be expected. The median household income of Naperville is ~ \$125,000, and the upper limit of the lowest quintile is ~\$68,000 with a population with income <200% of the FPL of 5.2%. Compare to ~ $62,000, ~\$22,000 and 29.5% for Chicago, IL. For the purposes of demonstrating the descriptive capabilities of the indicator, we construct an alternative HBI/PPI indicator by tripling both the PPI and HBI within Naperville census tracts across the board.
 
-P1_tract$HBI_size_avg_alternate <- 100 * 12 * calculate_bill_allegheny(volume=calculate_volume(hh_size = P1_tract$hh_size_avg_overallE))/P1_tract$hh_income_upper_limit_Q1E
+
+##### HBI/PPI Demonstrative Alternative
+
+
+```{r, results="hide"}
+
+P1_overall$HBI_alt <- 3 * P1_overall$HBI_size_avg
+P1_overall$PPI_alt <- 3 * P1_overall$PPI
+
+P1_tract$PPI_alt <- 3 * P1_tract$PPI
+P1_tract$HBI_alt <- 3 * P1_tract$HBI_size_avg
+
+P1_overall$Grade_PPI_alt <- p1_grade_ppi(P1_overall$PPI_alt)
+P1_tract$Grade_PPI_alt <- p1_grade_ppi(P1_tract$PPI_alt)
+
+P1_overall$Grade_HBI_alt <- p1_grade_hbi(P1_overall$HBI_alt)
+P1_tract$Grade_HBI_alt <- p1_grade_hbi(P1_tract$HBI_alt)
+
+P1_overall$Grade_AFF_alt <- p1_grade_hbi_ppi(gradeAffordability(P1_overall$HBI_alt,P1_overall$PPI_alt))
+P1_tract$Grade_AFF_alt <- p1_grade_hbi_ppi(gradeAffordability(P1_tract$HBI_alt,P1_tract$PPI_alt))
+```
+
+Below on the left we visualize the HBI, PPI, and overall grade using real data, and on the right with the demonstrated alternative data (applying Chicago's income and poverty distributions to Naperville). A similar layout could be used for a user to compare the affordability metrics associated with an existing rate structure with a user-inputted rate structure. 
+
+```{r, results="asis"}
+
+m <- P1_tract %>% select(GEOID,NAME,PPI,Grade_PPI,PPI_alt,Grade_PPI_alt,
+                         HBI_size_avg,Grade_HBI,HBI_alt,Grade_HBI_alt,
+                         Grade_AFF_avg, Grade_AFF_alt)
+
+m_ppi <- mapview::mapview(m,zcol="PPI",layer.name="PPI") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+
+m_ppi_alt <- mapview::mapview(m,zcol="PPI_alt",layer.name="Demo PPI") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+
+m_hbi <- mapview::mapview(m,zcol="HBI_size_avg",layer.name="HBI") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+
+m_hbi_alt <- mapview::mapview(m,zcol="HBI_alt",layer.name="Demo HBI") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+
+m_aff <- mapview::mapview(m,zcol="Grade_AFF_avg",layer.name="Affordability Grade") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+
+m_aff_alt <- mapview::mapview(m,zcol="Grade_AFF_alt",layer.name="Demo Affordability Grade") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+
+map1 <- sync(m_ppi,m_ppi_alt,m_hbi,m_hbi_alt,m_aff,m_aff_alt)
+
+map1
+```
+
+
+##### Cutoffs
+
+To set cutoffs, we need to examine a real-world distribution of cutoff rates. CA collects cutoff rate information for the [Electronic Annual Report](https://www.waterboards.ca.gov/drinking_water/certlic/drinkingwater/ear.html) process. Below, we see that at least in CA, 25% of utilities had no shutoffs at all, while another 20% of utilities had shutoff rates between 0% and 1%. We might wish to set "0" or "1%" as the "Good" category. There are some discontinuities evident at around a shutoff rate of 10% (7% of utilities were above that) and 15% (4% of utilities above that), which we might take as our boundary between "Fair" and "Poor" cutoff performance. This would be better tuned with more nationally representative data, but as a first cut:
+
+* Good: <1%
+* Fair: 1-10%
+* Poor: >10%
+
+
+
+```{r, results="asis"}
+#nothing
+load("../data/cal-data.rds")
+ggplot(D, aes(shutoffs_perc*100)) +
+  geom_rect(mapping=aes(xmin=0,ymin=0,xmax=1,ymax=1), fill="green", alpha=0.5) +
+  geom_rect(mapping=aes(xmin=1,ymin=0,xmax=10,ymax=1), fill="orange", alpha=0.5) +
+  geom_rect(mapping=aes(xmin=10,ymin=0,xmax=35,ymax=1), fill="red", alpha=0.5) +
+  stat_ecdf(geom="step") +
+  geom_vline(xintercept=1) +
+  geom_vline(xintercept=10) +
+  ylab("Cumulative proportion of utilities") +
+  xlab("Cutoff rate (%)")
 
 ```
+Recall that we simulated shutoff rates, assuming this was related to HBI and PPI, which might be a plausible story. Below, we apply our shutoff grades.
+
+```{r shutoffs, results="asis"}
+P1_tract <-
+  P1_tract %>%
+  mutate(Grade_cutoff = case_when(
+    Cutoff_Perc < 1 ~ "Good",
+    Cutoff_Perc >= 1 & Cutoff_Perc < 10 ~ "Fair",
+    Cutoff_Perc >= 10 ~ "Poor"
+  ))
+
+map2 <- select(P1_tract,NAME,GEOID,HBI_size_avg,PPI,aff_grade_avg, Cutoff_Perc, Grade_cutoff)
+mapview::mapview(map2,zcol="Grade_cutoff",layer.name="Cutoff (%) Grade")
+```
+
+
+##### Customer Assistance Program participation
+
+Participation should be measured as a proportion of "eligible" households. The approach here should be to set the eligible population as the proportion of families earning less than 200% of the FPL. Based on previous [participation reports](https://media.gradebuddy.com/documents/1714107/ca3c4163-ea95-438b-ad86-3f1a5558622d.pdf) from the CA Low-Income Rate Assistance Program, as well as the [LIHEAP program](https://liheappm.acf.hhs.gov/data_warehouse/index.php?report=adHocQueries) participation among this eligible population is generally between 0% and 40%, with an interquartile range of 11-22%. We can revise this to more "round" numbers of 10% and 25%. 
+
+
+* Good: >25%
+* Fair: 10-25%
+* Poor: <10%
+
+We simulated this CAP participation rate, making assumptions related to certain demographic groups having lower participation rates than others, although most empirical evidence in the literature suggests this not to be a significant factor over the general level of outreach and application barriers to such programs. We apply the thresholds to create the 3-level grades below.
+
+```{r CAP}
+P1_tract$CAP_Percent <- (200/3)*P1_tract$CAP_Perc/P1_tract$PPI
+
+P1_tract <-
+  P1_tract %>% 
+  mutate(Grade_CAP = case_when(
+    CAP_Percent < 10 ~ "Poor",
+    CAP_Percent >= 10 & CAP_Percent < 25 ~ "Fair",
+    CAP_Percent >= 25 ~ "Good"
+  ))
+
+map3 <- select(P1_tract,NAME,GEOID,HBI_size_avg,PPI,aff_grade_avg, Cutoff_Perc, Grade_cutoff, CAP_Perc, Grade_CAP)
+mapview::mapview(map3,zcol="Grade_CAP",layer.name="Garde of CAP Participation/PPI (%)")
+```
+
+##### Appliance efficiency incentive participation rate
+
+Annual participation in whole-home retrofit programs generally [tops out at 3%](https://www.aceee.org/sites/default/files/publications/researchreports/u1501.pdf), and individual appliance or irrigation/ field turf retrofits can vary between 0-20% or more. A first cut of thresholds:
+
+* Good: >5%
+* Fair: 1-5%
+* Poor: <1%
+
+```{r}
+set.seed(324324)
+P1_tract$Incentive_rate <- rnorm(length(P1_tract$GEOID),2.5,1.5)
+P1_tract <-
+  P1_tract %>%
+  mutate(Grade_incentive = case_when(
+    Incentive_rate < 1 ~ "Poor",
+    Incentive_rate >=1 & Incentive_rate < 5 ~ "Fair",
+    Incentive_rate >= 5 ~ "Good"
+  ))
+
+m4 <- select(P1_tract, NAME,GEOID,Incentive_rate,Grade_incentive)
+mapview::mapview(m4,zcol="Grade_incentive",layer.name="Incentive Participation grade")
+```
+
+#### Utility-level only
+
+##### Percent accounts with service interruption
+
+* Good: < 1%
+* Fair: 1-5%
+* Poor: >5%
+
+##### Percent accounts with at least 1 boil water advisory
+
+* Good: 0%
+* Fair: 0-1%
+* Poor: >1%
+
+S
+
+For Naperville, this is 0 (Good)
+
+##### SDWA Violations
+
+It can be difficult to normalize water quality regulatory violations across utilities by contaminant type or population exposed. Instead we can adopt the EPA's framework. EPA identifies utilities as "serious violators" if they have a repeated pattern of water quality violations without addressing them.
+
+* Good: 0 violations
+* Fair: >0 violations, but EPA not labeled as "Serious Violator" for that year
+* Poor: EPA has labeled as "Serious violator" for that year
+
+Serious violator status and health-based violation count can be procured from [EPA SDWIS](https://echo.epa.gov/files/echodownloads/SDWA_downloads.zip)
+
+The majority of utilities in any given year have 0 health-based violations, and will be "good". 
+
+### Pillar 2
+
+#### Tract Level
+
+##### % of staff in tract/ % of service population in tract
+
+* Good: >0.5
+* Fair: 0.25 - 0.5
+* Poor: <0.25
+
+#### Utility-level only
+
+##### % of staff in the Service area
+
+* Good: >0.5
+* Fair: 0.25 - 0.5
+* Poor: <0.25
+
+The rest of the indicators are binary 0/1:
+
+* Recruitment diversity requirement
+* Local procurement requirement
+* Training and education programs offered within area
+
+See Lens_Pillars_Overall.xlsx for more detail.
+
+### Pillar 3
+
+#### Tract Level
+
+##### Total Community Meetings
+
+* Good: >1
+* Fair: 1
+* Poor: 0
+
+##### Main breaks/ 1000ft pipe
+
+##### Leaks detected/ 1000ft pipe
+
+##### Sewer overflows/ 1000ft pipe 
+
+##### Percentage Sewage Lines lead
+
+##### Propoertion lead lines replaced
+
+##### Percent Network renewed
+
+##### % Real losses reduced
+
+#### Overall level
+
+##### Utility Resilience Index, Rescaled without poverty and income indicators
+Can be filled out at the [EPA VSAT tool](https://vsat.epa.gov/vsat/)
+
+* Good: >0.75
+* Fair: 0.5 - 0.75
+* Poor: < 0.5
+
+##### Infrastructure Leakage Index
+
+* Good: <3
+* Fair: 3-8
+* Poor: >8
