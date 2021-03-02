@@ -7,7 +7,7 @@ output:
   html_document:
     toc: true
     toc_float: true
-    toc_depth: 4
+    toc_depth: 5
     code_folding: hide
     fig_width: 8
     fig_height: 8
@@ -59,7 +59,7 @@ load("../cache/indicators_ungraded.RData")
 
 ## Indicator grades
 
-For each indicator, we set thresholds for "Poor", "Fair", and "Good" performance, set such that "Fair" corresponds to a wide range within a normal distribution of outcomes. 
+For each indicator, we set thresholds for "Poor", "Fair", and "Good" performance, set such that "Fair" corresponds to a wide range within a normal distribution of outcomes. Where [available](http://www.nud.net/home/showdocument?id=12607), we use data from the AWWA Benchmarking database interquartile ranges to construct these thresholds. Where not available, we use best engineering practice from the literature or other surveys. Xylem should consider purchasing this dataset annually to help construct the thresholds. 
 
 ### Pillar 1
 
@@ -70,9 +70,9 @@ For each indicator, we set thresholds for "Poor", "Fair", and "Good" performance
 p1_grade_hbi <- function(x){
   grade <- NA
   grade <- dplyr::case_when(
-    x < 7 ~ "Good",
-    x >= 7 & x < 10 ~ "Fair",
-    x >= 10 ~ "Poor"
+    x < 7 ~ "1. Good - <7%",
+    x >= 7 & x < 10 ~ "2. Fair - 7-10%",
+    x >= 10 ~ "3. Poor - >10%"
   )
   return(grade)
 }
@@ -81,9 +81,9 @@ p1_grade_hbi <- function(x){
 p1_grade_ppi <- function(x){
   grade <- NA
   grade <- dplyr::case_when(
-    x < 20 ~ "Good",
-    x >= 20 & x < 35 ~ "Fair",
-    x >= 35 ~ "Poor"
+    x < 20 ~ "1. Good",
+    x >= 20 & x < 35 ~ "2. Fair",
+    x >= 35 ~ "3. Poor"
   )
   return(grade)
 }
@@ -92,11 +92,11 @@ p1_grade_ppi <- function(x){
 p1_grade_hbi_ppi <- function(x){
   grade <- NA
   grade <- dplyr::case_when(
-    x == "Low Burden" ~ "Good",
-    x == "Moderate-Low Burden" ~ "Fair",
-    x == "Moderate-High Burden" ~ "Fair",
-    x == "High Burden" ~ "Poor",
-    x == "Very High Burden" ~ "Poor"
+    x == "Low Burden" ~ "1. Good",
+    x == "Moderate-Low Burden" ~ "2. Fair",
+    x == "Moderate-High Burden" ~ "2. Fair",
+    x == "High Burden" ~ "3. Poor",
+    x == "Very High Burden" ~ "3. Poor"
     
   )
   return(grade)
@@ -164,9 +164,9 @@ m_hbi <- mapview::mapview(m,zcol="HBI_size_avg",layer.name="HBI") +  mapview::ma
 
 m_hbi_alt <- mapview::mapview(m,zcol="HBI_alt",layer.name="Demo HBI") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
 
-m_aff <- mapview::mapview(m,zcol="Grade_AFF_avg",layer.name="Affordability Grade") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+m_aff <- mapview::mapview(m,zcol="Grade_AFF_avg",layer.name="Affordability Grade",col.regions=brewer.pal(3,"Dark2")) +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
 
-m_aff_alt <- mapview::mapview(m,zcol="Grade_AFF_alt",layer.name="Demo Affordability Grade") +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
+m_aff_alt <- mapview::mapview(m,zcol="Grade_AFF_alt",layer.name="Demo Affordability Grade", col.regions=brewer.pal(3,"Dark2")) +  mapview::mapview(b,alpha.regions=0,col.regions="red",stroke=TRUE,lwd=3,color="red",layer.name="Municipal Boundary")
 
 map1 <- sync(m_ppi,m_ppi_alt,m_hbi,m_hbi_alt,m_aff,m_aff_alt)
 
@@ -174,9 +174,37 @@ map1
 ```
 
 
-##### Cutoffs
+##### Delinquency Rate
+To set Delinquency grade thresholds, we take data from the AWWA Benchmarking database and set them to the interquartile range:
 
-To set cutoffs, we need to examine a real-world distribution of cutoff rates. CA collects cutoff rate information for the [Electronic Annual Report](https://www.waterboards.ca.gov/drinking_water/certlic/drinkingwater/ear.html) process. Below, we see that at least in CA, 25% of utilities had no shutoffs at all, while another 20% of utilities had shutoff rates between 0% and 1%. We might wish to set "0" or "1%" as the "Good" category. There are some discontinuities evident at around a shutoff rate of 10% (7% of utilities were above that) and 15% (4% of utilities above that), which we might take as our boundary between "Fair" and "Poor" cutoff performance. This would be better tuned with more nationally representative data, but as a first cut:
+* Good: < 2.5%
+* Fair: 2.5% - 14%
+* Poor: > 14%
+
+```{r}
+P1_tract$Delinquency_rate <- P1_tract$Cutoff_Perc*3.1
+
+P1_tract <-
+  P1_tract %>%
+  mutate(Grade_delinquency = case_when(
+    Delinquency_rate < 2.5 ~ "1. Good - <2.5%",
+    Delinquency_rate >= 2.5 & Delinquency_rate <= 14 ~ "2. Fair - 2.5-14%",
+    Delinquency_rate > 14 ~ "3. Poor - >14%"
+  ))
+
+map2 <- select(P1_tract,NAME,GEOID,HBI_size_avg,PPI,aff_grade_avg, Delinquency_rate, Grade_delinquency)
+mapview::mapview(map2,zcol="Grade_delinquency",
+                 layer.name="Delinquency (%) Grade",
+                 col.regions=brewer.pal(2,"Dark2"))
+```
+
+
+
+
+
+##### Cutoff Rate
+
+To set cutoff grade thresholds, we need to examine a real-world distribution of cutoff rates, which are not included in the AWWA Benchmarkind data. CA collects cutoff rate information for the [Electronic Annual Report](https://www.waterboards.ca.gov/drinking_water/certlic/drinkingwater/ear.html) process. Below, we see that at least in CA, 25% of utilities had no shutoffs at all, while another 20% of utilities had shutoff rates between 0% and 1%. We might wish to set "0" or "1%" as the "Good" category. There are some discontinuities evident at around a shutoff rate of 10% (7% of utilities were above that) and 15% (4% of utilities above that), which we might take as our boundary between "Fair" and "Poor" cutoff performance. This would be better tuned with more nationally representative data, but as a first cut:
 
 * Good: <1%
 * Fair: 1-10%
@@ -204,19 +232,21 @@ Recall that we simulated shutoff rates, assuming this was related to HBI and PPI
 P1_tract <-
   P1_tract %>%
   mutate(Grade_cutoff = case_when(
-    Cutoff_Perc < 1 ~ "Good",
-    Cutoff_Perc >= 1 & Cutoff_Perc < 10 ~ "Fair",
-    Cutoff_Perc >= 10 ~ "Poor"
+    Cutoff_Perc < 1 ~ "1. Good - <1%",
+    Cutoff_Perc >= 1 & Cutoff_Perc < 10 ~ "2. Fair - 1-10%",
+    Cutoff_Perc >= 10 ~ "3. Poo - >10%r"
   ))
 
 map2 <- select(P1_tract,NAME,GEOID,HBI_size_avg,PPI,aff_grade_avg, Cutoff_Perc, Grade_cutoff)
-mapview::mapview(map2,zcol="Grade_cutoff",layer.name="Cutoff (%) Grade")
+mapview::mapview(map2,zcol="Grade_cutoff",
+                 layer.name="Cutoff (%) Grade",
+                 col.regions=brewer.pal(2,"Dark2"))
 ```
 
 
 ##### Customer Assistance Program participation
 
-Participation should be measured as a proportion of "eligible" households. The approach here should be to set the eligible population as the proportion of families earning less than 200% of the FPL. Based on previous [participation reports](https://media.gradebuddy.com/documents/1714107/ca3c4163-ea95-438b-ad86-3f1a5558622d.pdf) from the CA Low-Income Rate Assistance Program, as well as the [LIHEAP program](https://liheappm.acf.hhs.gov/data_warehouse/index.php?report=adHocQueries) participation among this eligible population is generally between 0% and 40%, with an interquartile range of 11-22%. We can revise this to more "round" numbers of 10% and 25%. 
+Participation should be measured as a proportion of "eligible" households. Here we set the eligible population as the proportion of families earning less than 200% of the FPL, although this in principle could be set on a utility-by-utility or utility-by-state basis with the appropriate eligibility criteria and estimates of this population. Based on previous [participation reports](https://media.gradebuddy.com/documents/1714107/ca3c4163-ea95-438b-ad86-3f1a5558622d.pdf) from the CA Low-Income Rate Assistance Program, as well as the national [LIHEAP program](https://liheappm.acf.hhs.gov/data_warehouse/index.php?report=adHocQueries) participation among this eligible population is generally between 0% and 40%, with an interquartile range of 11-22%. We can revise this to more "round" numbers of 10% and 25%. 
 
 
 * Good: >25%
@@ -231,14 +261,16 @@ P1_tract$CAP_Percent <- (200/3)*P1_tract$CAP_Perc/P1_tract$PPI
 P1_tract <-
   P1_tract %>% 
   mutate(Grade_CAP = case_when(
-    CAP_Percent < 10 ~ "Poor",
-    CAP_Percent >= 10 & CAP_Percent < 25 ~ "Fair",
-    CAP_Percent >= 25 ~ "Good"
+    CAP_Percent < 10 ~ "3. Poor - <10%",
+    CAP_Percent >= 10 & CAP_Percent < 25 ~ "2. Fair - 10-25%",
+    CAP_Percent >= 25 ~ "1. Good - >25%"
   ))
 
 map3 <- select(P1_tract,NAME,GEOID,HBI_size_avg,PPI,aff_grade_avg, Cutoff_Perc, Grade_cutoff, CAP_Perc, Grade_CAP)
-mapview::mapview(map3,zcol="Grade_CAP",layer.name="Garde of CAP Participation/PPI (%)")
+mapview::mapview(map3,zcol="Grade_CAP",layer.name="Garde of CAP Participation/PPI (%)", col.regions=brewer.pal(3,"Dark2"))
 ```
+
+
 
 ##### Appliance efficiency incentive participation rate
 
@@ -254,22 +286,87 @@ P1_tract$Incentive_rate <- rnorm(length(P1_tract$GEOID),2.5,1.5)
 P1_tract <-
   P1_tract %>%
   mutate(Grade_incentive = case_when(
-    Incentive_rate < 1 ~ "Poor",
-    Incentive_rate >=1 & Incentive_rate < 5 ~ "Fair",
-    Incentive_rate >= 5 ~ "Good"
+    Incentive_rate < 1 ~ "3. Poor - <1%",
+    Incentive_rate >=1 & Incentive_rate < 5 ~ "2. Fair - 1-5% ",
+    Incentive_rate >= 5 ~ "1. Good - >5%"
   ))
 
 m4 <- select(P1_tract, NAME,GEOID,Incentive_rate,Grade_incentive)
-mapview::mapview(m4,zcol="Grade_incentive",layer.name="Incentive Participation grade")
+mapview::mapview(m4,zcol="Grade_incentive",layer.name="Incentive Participation grade",col.regions=brewer.pal(3,"Dark2"))
 ```
+
+##### "Technical (service quality)" Complaints received/ 1,000 connections
+
+The interquartile range for the 2018 version of the AWWA Benchmarking data for combined breaks and leaks can be used to set the ranges:
+
+* Good: < 1.5
+* Fair: 1.5 - 6.5
+* Poor: > 6.5
+
+```{r complaints}
+set.seed(3242324)
+P1_tract$complaint_per_conn <- rnorm(length(P1_tract$GEOID),
+                                     3.4,2.5)
+
+P1_tract$complaint_per_conn[which(P1_tract$complaint_per_conn<0)]<-0
+
+
+P1_tract <- 
+  P1_tract %>%
+  mutate(Grade_complaint_per_conn =
+    case_when( 
+      complaint_per_conn < 1.5 ~ "1. Good - <1.5 ",
+      complaint_per_conn >= 1.5 & complaint_per_conn < 6.5 ~ "2. Fair - 1.5-6.5",
+      complaint_per_conn >= 6.5 ~ "3. Poor - >6.5"
+      
+    )
+  )
+                                 
+m5 <- select(P1_tract, NAME,GEOID,complaint_per_conn,Grade_complaint_per_conn)
+mapview::mapview(m5,zcol="Grade_complaint_per_conn",layer.name="Complaint grade",col.regions=brewer.pal(3,"Dark2"))
+```
+##### % Complaints resolved
+
+The interquartile range for the 2018 version of the AWWA Benchmarking data for combined breaks and leaks can be used to set the ranges:
+
+* NA: No complaints
+* Good: > 97%
+* Fair: 91% - 97%
+* Poor: < 91%
+
+```{r complaints addressed}
+set.seed(3242324)
+P1_tract$complaint_addressed_percent <- rnorm(length(P1_tract$GEOID),
+                                     95,3)
+
+P1_tract$complaint_addressed_percent[which(P1_tract$complaint_per_conn==0)] <- NA
+
+
+P1_tract <- 
+  P1_tract %>%
+  mutate(Grade_complaint_addressed_percent =
+    case_when( 
+      complaint_addressed_percent > 97 ~ "1. Good - >97%",
+      complaint_addressed_percent >= 91 & complaint_per_conn <= 97 ~ "2. Fair - 91-97%",
+      complaint_addressed_percent < 91 ~ "3. Poor - <91%"
+      
+    )
+  )
+
+m6 <- select(P1_tract, NAME,GEOID,complaint_addressed_percent,Grade_complaint_addressed_percent)
+mapview::mapview(m6,zcol="Grade_complaint_addressed_percent",layer.name="Complaint grade",col.regions=brewer.pal(3,"Dark2"))
+```
+
 
 #### Utility-level only
 
-##### Percent accounts with service interruption
+##### Disruption frequency index (Total interruptions/ customers)
 
-* Good: < 1%
-* Fair: 1-5%
-* Poor: >5%
+Thresholds based on AWWA Benchmarking data:
+
+* Good: < 1
+* Fair: 1 - 4
+* Poor: > 4
 
 ##### Percent accounts with at least 1 boil water advisory
 
@@ -277,13 +374,12 @@ mapview::mapview(m4,zcol="Grade_incentive",layer.name="Incentive Participation g
 * Fair: 0-1%
 * Poor: >1%
 
-S
 
 For Naperville, this is 0 (Good)
 
 ##### SDWA Violations
 
-It can be difficult to normalize water quality regulatory violations across utilities by contaminant type or population exposed. Instead we can adopt the EPA's framework. EPA identifies utilities as "serious violators" if they have a repeated pattern of water quality violations without addressing them.
+It can be difficult to normalize water quality regulatory violations across utilities by contaminant type or population exposed. Instead we can adopt the EPA's framework. EPA identifies utilities as ["serious violators"](https://echo.epa.gov/help/sdwa-faqs) if they have a repeated pattern of water quality violations without addressing them.
 
 * Good: 0 violations
 * Fair: >0 violations, but EPA not labeled as "Serious Violator" for that year
@@ -297,13 +393,32 @@ The majority of utilities in any given year have 0 health-based violations, and 
 
 #### Tract Level
 
-##### % of staff in tract/ % of service population in tract
+##### % of staff in tract/ % of service households in tract
 
 * Good: >0.5
 * Fair: 0.25 - 0.5
 * Poor: <0.25
 
-#### Utility-level only
+
+```{r staff}
+P2_tract <- 
+  P2_tract %>% 
+  mutate(
+    staff_count2 = staff_count/3,
+    staff_share_ratio = (staff_count2/300)/(hh_type_total_countE/sum(hh_type_total_countE)),
+    Grade_staff_share_ratio = case_when(
+      staff_share_ratio > 0.5 ~ "1. Good - >0.5",
+      staff_share_ratio > 0.25 & staff_share_ratio <= 0.5 ~ "2. Fair - 0.25-0.5",
+      staff_share_ratio <= 0.25 ~ "3. Poor - <0.25"
+    )
+  )
+
+tr.w2 <- select(tr.w,GEOID)
+P2_tract <- left_join(tr.w2,P2_tract,by="GEOID")
+mapview(P2_tract, zcol ="Grade_staff_share_ratio", layer.name = "% of staff in tract/ </break>% of service households in tract",col.regions=brewer.pal(3,"Dark2"))
+
+```
+#### Utility-level 
 
 ##### % of staff in the Service area
 
@@ -323,37 +438,274 @@ See Lens_Pillars_Overall.xlsx for more detail.
 
 #### Tract Level
 
-##### Total Community Meetings
+3##### Total Community Meetings
 
-* Good: >1
+* Good: > 1
 * Fair: 1
 * Poor: 0
 
-##### Main breaks/ 1000ft pipe
+```{r meetings}
+set.seed(432543)
+P3_tract$meeting_count<- rbinom(length(P3_tract$GEOID),1,0.3)
 
-##### Leaks detected/ 1000ft pipe
+P3_tract <- 
+  P3_tract %>% 
+  mutate(
+  Grade_meetings = case_when(
+      meeting_count > 1 ~ "1. Good - >1",
+      meeting_count == 1 ~ "2. Fair - 1",
+      meeting_count == 0 ~ "3. Poor - 0"
+    )
+  )
+```
 
-##### Sewer overflows/ 1000ft pipe 
+##### Main breaks AND leaks/ 100 mi pipe
 
-##### Percentage Sewage Lines lead
+```{r, include=FALSE}
+P3_tract$mains_100mile <- P3_tract$ft_mains/(5280*100)
 
-##### Propoertion lead lines replaced
 
-##### Percent Network renewed
+```
 
-##### % Real losses reduced
+Based on this [report](https://digitalcommons.usu.edu/cgi/viewcontent.cgi?article=1173&context=mae_facpub), main break rates can vary considerably by utility network length, pipe materials, and corrosiveness of soil, although the highest break rates by a large margin is in the combination of Cast Iron pipe with highly corrosive soils, with break rates in Cast Iron pipe in small utilities exceeding 60/ 100 mile-year. The average break rate across North America is 25-30 breaks/ 100-mi-yr. The AWWA "Distribution System Optimization Program" sets a target of <= 15 breaks/ 100-mi-yr. However, given how much the variation may be driven by very small utilities with high proportions of Cast Iron mains length, we also refer to the AWWA Benchmarking data. The interquartile range for the 2018 version for combined breaks and leaks can be used to set the ranges:
+
+* Good: < 5
+* Fair: 5 - 20
+* Poor: > 20 
+
+```{r breaks2}
+
+P3_tract$breaks_100mi <- P3_tract$main_breaks/P3_tract$mains_100mile
+
+P3_tract <- 
+  P3_tract %>% 
+  mutate(
+  Grade_breaks = case_when(
+      breaks_100mi < 5 ~ "1. Good - <5",
+      breaks_100mi >= 5 & meeting_count <=20 ~ "2. Fair - 5-20",
+      breaks_100mi > 20 ~ "3. Poor - >20"
+    )
+  )
+
+```
+
+##### Sewer overflows/ 100 mi pipe 
+
+
+This is based on the 2005 Benchmarking result.
+
+* Good: < 2
+* Fair: 2 - 10
+* Poor: > 10 
+
+```{r breaks}
+
+P3_tract$SSO_100mi <- P3_tract$breaks_100mi  
+
+P3_tract <- 
+  P3_tract %>% 
+  mutate(
+  Grade_SSO = case_when(
+      SSO_100mi < 2 ~ "1. Good - <2",
+      SSO_100mi >= 2 & meeting_count <= 10 ~ "2. Fair - 2-10",
+      SSO_100mi > 10 ~ "3. Poor - >10"
+    )
+  )
+
+```
+
+##### Percentage service Lines lead
+
+* Good: 0
+* Fair: 0 - 5
+* Poor: > 5
+
+```{r lead}
+
+P3_tract <- 
+  P3_tract %>%
+  mutate(Grade_prop_lead_lines = case_when(
+    prop_lead_lines == 0 ~ "1. Good - 0%",
+    prop_lead_lines > 0 & prop_lead_lines <= 0.05 ~ "2. Fair - 0-5%",
+    prop_lead_lines > 0.05 ~ "3. Poor - >5%"
+  ))
+```
+
+##### Percentage lead lines replaced
+
+Points based on Lead and Copper Rule requirements, which say that if lead action levels exceed 0.015mg/l after implementing corrosion control, [7% of lead lines should be replaced annually (p.19)](https://www.awwa.org/Portals/0/AWWA/Government/StrategiesforLSLs.pdf?ver=2013-03-29-132027-193). 
+
+* NA: No lead lines or system meets LCR Action levels for lead in accordance with LCR sampling plan. 
+* Good: >= 7 
+* Fair: 0 - 7
+* Poor: 0
+
+
+```{r lead2}
+set.seed(485782343)
+P3_tract$prop_lead_lines_replaced <-
+  runif(length(P3_tract$GEOID), -0.1, 0.15)
+P3_tract$prop_lead_lines_replaced[which(P3_tract$prop_lead_lines == 0)] <-
+  NA
+
+P3_tract <-
+  P3_tract %>%
+  mutate(
+    Grade_prop_lead_lines_replaced = case_when(
+      is.na(prop_lead_lines_replaced) ~ NA_character_,
+      prop_lead_lines_replaced <= 0 ~ "3. Poor - 0%",
+      prop_lead_lines_replaced > 0 &
+        prop_lead_lines_replaced <= 0.07 ~ "2. Fair - 0-7%",
+      prop_lead_lines_replaced > 0.07 ~ "1. Good - >7%"
+    )
+  )
+
+
+```
+##### Percent Network renewed (by asset value)
+
+Based on the 2018 AWWA Benchmarking data, setting thresholds according to the interquartile range:
+
+* Good: > 2
+* Fair: 0.5 - 2
+* Poor: < 0.5
+
+```{r renewal}
+P3_tract$network_renewal_percent <- 1.5*P3_tract$network_renewal_percent/10
+
+P3_tract <- 
+  P3_tract %>%
+  mutate(Grade_network_renewal_percent = case_when(
+    network_renewal_percent < 0.5 ~ "3. Poor - <0.5%",
+    network_renewal_percent >= 0.5 & network_renewal_percent <= 2 ~ "2. Fair - 0.5-2%",
+    network_renewal_percent > 2 ~ "1. Good >2%"
+  ))
+
+
+```
+
+
+
+##### Planned Linear Maintenance (hrs/ 100 mile)
+
+* Good: > 1800
+* Fair: 650 - 1800
+* Poor: < 650
+
+```{r maintenance}
+P3_tract$Maintenance_100mi <- rnorm(length(P3_tract$GEOID),937,400)
+
+P3_tract <- 
+  P3_tract %>%
+  mutate(Grade_maintenance = case_when(
+    Maintenance_100mi < 650 ~ "3. Poor - <650",
+    Maintenance_100mi >= 650 & Maintenance_100mi <= 1800 ~ "2. Fair - 650-1800",
+    Maintenance_100mi > 1800 ~ "1. Good - >1800"
+  ))
+
+
+```
+
+
 
 #### Overall level
 
 ##### Utility Resilience Index, Rescaled without poverty and income indicators
 Can be filled out at the [EPA VSAT tool](https://vsat.epa.gov/vsat/)
 
-* Good: >0.75
+* Good: > 0.75
 * Fair: 0.5 - 0.75
 * Poor: < 0.5
 
 ##### Infrastructure Leakage Index
 
-* Good: <3
+The ILI is a performance indicator of how well a distribution system is managed for the control of real losses.  ILI = Total Annual Real Losses/Unavoidable Annual Real Losses. It can be calculated with the AWWA Water Loss Audit Worksheet. It has a minimum realistic value of 1, and theoretical maximum ~14. 
+
+See [here] for a justification of the thresholds set below. (https://www.twdb.texas.gov/conservation/municipal/waterloss/doc/InfrastructureLeakageIndex.pdf)
+
+* Good: < 3
 * Fair: 3-8
-* Poor: >8
+* Poor: > 8
+
+
+## Create Final Datasets
+
+```{r}
+
+d <- left_join(P1_tract,st_drop_geometry(P2_tract), by="GEOID")
+d <- left_join(d,P3_tract,by="GEOID")
+
+## Make Pillar 1 Datasets
+d <- d %>%
+  mutate(
+    P1_HBI = HBI_size_avg,
+    P1_PPI = PPI,
+    P1_Delinquency_rate = Delinquency_rate,
+    P1_Cutoff_rate = Cutoff_Perc,
+    P1_CAP = CAP_Percent,
+    P1_Efficiency_Program = Incentive_rate,
+    P1_Complaints_per_1000conn = complaint_per_conn,
+    P1_Complaint_Resolution = complaint_addressed_percent,
+    P1_Grade_HBI = Grade_HBI,
+    P1_Grade_Affordability = Grade_AFF_avg,
+    P1_Grade_Affordability_alt = Grade_AFF_alt,
+    P1_Grade_Delinquency = Grade_delinquency,
+    P1_Grade_Cutoff = Grade_cutoff,
+    P1_Grade_CAP = Grade_CAP,
+    P1_Grade_Efficiency = Grade_incentive,
+    P1_Grade_Complaints_per1000conn = Grade_complaint_per_conn,
+    P1_Grade_Complaint_Resolution = Grade_complaint_addressed_percent
+  )
+
+p1 <- select(d, GEOID, P1_HBI:P1_Grade_Complaint_Resolution)
+
+## Make Pillar 2 Dataset 
+
+d <- d %>% 
+  mutate(
+    P2_Staff_Share_Ratio = staff_share_ratio,
+    P2_Grade_Staff_Share = Grade_staff_share_ratio
+  )
+
+p2 <- select(d, GEOID, P2_Staff_Share_Ratio,P2_Grade_Staff_Share)
+
+
+## Make Pillar 3 Dataset
+
+d <- d %>% mutate(
+  P3_Meetings = meeting_count,
+  P3_Grade_Meetings = Grade_meetings,
+  P3_Breaks_100mi = breaks_100mi,
+  P3_SSO_100mi = SSO_100mi,
+  P3_Lead_Lines_Percent = 100*prop_lead_lines,
+  P3_Lead_Lines_Replaced_Percent = prop_lead_lines_replaced,
+  P3_Network_Renewal = network_renewal_percent,
+  P3_Maintenance_Hrs_100mi = Maintenance_100mi,
+  P3_Grade_Meetings = Grade_meetings,
+  P3_Grade_Breaks = Grade_breaks,
+  P3_Grade_SSO = Grade_SSO,
+  P3_Grade_Lead = Grade_prop_lead_lines,
+  P3_Grade_Lead_Replace = prop_lead_lines_replaced,
+  P3_Grade_Network_Renewal = Grade_network_renewal_percent,
+  P3_Grade_Maintenance = Grade_maintenance
+)
+
+
+p3 <- select(d,GEOID, P3_Meetings:P3_Grade_Maintenance)
+             
+             
+tracts <- select(d,GEOID, P1_HBI:P3_Grade_Maintenance)
+
+
+st_write(p1,"../out/Tracts_Pillar1.geojson")
+write.csv(st_drop_geometry(p1),"../out/Tracts_Pillar1.csv")
+
+st_write(p2,"../out/Tracts_Pillar2.geojson")
+write.csv(st_drop_geometry(p2),"../out/Tracts_Pillar2.csv")
+
+st_write(p3,"../out/Tracts_Pillar3.geojson")
+write.csv(st_drop_geometry(p3),"../out/Tracts_Pillar3.csv")
+
+st_write(tracts,"../out/Tracts_Pillars_All.geojson")
+write.csv(st_drop_geometry(tracts),"../out/Tracts_Pillars_All.csv")
+```

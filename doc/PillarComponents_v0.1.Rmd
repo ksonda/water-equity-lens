@@ -445,7 +445,7 @@ P3_tract <- P3.c %>% st_drop_geometry() %>%
             ft_mains = sum(ft_mains),
             lead_lines = sum(lead_line,na.rm=TRUE)) %>%ungroup()
 
-P3_tract <- P3_tract %>% 
+P3_tract <- P3_tract %>% dsf
   mutate(meeting_count = round(runif(1, min=0,max=4)),
          meeting_count_1000hh = meeting_count/hh_type_total_countE,
          main_breaks = floor(runif(length(GEOID),min=0,max=3)),
