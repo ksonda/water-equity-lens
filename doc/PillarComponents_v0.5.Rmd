@@ -823,7 +823,9 @@ N <- N %>% mutate(
   
 )
 
-P1_tract$Grade_PPI <- p1_grade_ppi(P1_tract$PPI)
 
 
+st_write(N,"../out/Neighborhoods_Pillars_All.csv")
+N <- left_join(neigh,N,by=c("GEOID"="GEOID.1"))
+st_write(N,"../out/Neighborhoods_Pillars_All.geojson")
 ```
