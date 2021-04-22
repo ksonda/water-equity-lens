@@ -22,6 +22,7 @@ library(mapview)
 library(RColorBrewer)
 library(viridisLite)
 library(leafsync)
+library(lwgeom)
 
 calculate_volume <- function(hh_size = 4, gpcd = 50){
   vol = hh_size * gpcd * 30
@@ -482,7 +483,7 @@ P3_tract <-
   mutate(
   Grade_breaks = case_when(
       breaks_100mi < 5 ~ "1. Good - <5",
-      breaks_100mi >= 5 & meeting_count <=20 ~ "2. Fair - 5-20",
+      breaks_100mi >= 5 & breaks_100mi <=20 ~ "2. Fair - 5-20",
       breaks_100mi > 20 ~ "3. Poor - >20"
     )
   )
@@ -708,4 +709,121 @@ write.csv(st_drop_geometry(p3),"../out/Tracts_Pillar3.csv")
 
 st_write(tracts,"../out/Tracts_Pillars_All.geojson")
 write.csv(st_drop_geometry(tracts),"../out/Tracts_Pillars_All.csv")
+```
+
+### Nextlevel up
+ 
+We recalculate the tract level data to the arbitrary "neighborhood" level for demonstration purposes
+
+```{r}
+## download neighborhood layer
+neigh <- read_sf("data/neigh.geojson")
+d.n <- st_intersection(d,neigh)
+d.n$area <- as.numeric(st_area(d.n))
+d.n <- dplyr::filter(d.n,area>1)
+
+d.n <- st_drop_geometry(d.n)
+
+N <- d.n %>% group_by(GEOID.1) %>% summarise(
+  P1_HBI_alt = weighted.mean(P1_HBI*3,hh_type_total_countE,na.rm=TRUE),
+  P1_HBI = weighted.mean(P1_HBI,hh_type_total_countE,na.rm=TRUE),
+  P1_PPI_alt = weighted.mean(P1_PPI*3,hh_type_total_countE,na.rm=TRUE),
+  P1_PPI = weighted.mean(P1_PPI,hh_type_total_countE,na.rm=TRUE),
+  P1_Delinquency_rate = weighted.mean(P1_Delinquency_rate,hh_type_total_countE,na.rm=TRUE),
+  P1_Cutoff_rate = weighted.mean(P1_Cutoff_rate,hh_type_total_countE,na.rm=TRUE),
+  P1_CAP = weighted.mean(P1_CAP,hh_type_total_countE,na.rm=TRUE),
+  P1_Efficiency_Program = weighted.mean(P1_Efficiency_Program,hh_type_total_countE,na.rm=TRUE),
+  P1_Complaints_per_1000conn = weighted.mean(P1_Complaints_per_1000conn,hh_type_total_countE,na.rm=TRUE),
+  P1_Complaint_Resolution = weighted.mean(P1_Complaint_Resolution,hh_type_total_countE,na.rm=TRUE),
+  P2_Staff_Share_Ratio = weighted.mean(P2_Staff_Share_Ratio,hh_type_total_countE,na.rm=TRUE),
+  P3_Meetings = sum(P3_Meetings,na.rm=TRUE),
+  P3_Breaks_100mi = weighted.mean(P3_Breaks_100mi,mains_100mile,na.rm=TRUE),
+  P3_SSO_100mi = weighted.mean(P3_SSO_100mi,mains_100mile,na.rm=TRUE),
+  P3_Lead_Lines_Percent = weighted.mean(P3_Lead_Lines_Percent, hh_type_total_countE,na.rm=TRUE),
+  P3_Lead_Lines_Replaced_Percent = 100*weighted.mean(P3_Lead_Lines_Replaced_Percent,lead_lines,na.rm=TRUE),
+  P3_Network_Renewal = weighted.mean(P3_Network_Renewal,mains_100mile,na.rm=TRUE),
+  P3_Maintenance_Hrs_100mi = weighted.mean(P3_Maintenance_Hrs_100mi,mains_100mile,na.rm=TRUE)
+)
+
+N <- N %>% mutate(
+  P1_Grade_HBI = p1_grade_hbi(P1_HBI),
+  P1_Grade_HBI_alt = p1_grade_hbi(P1_HBI_alt),
+  P1_Grade_PPI = p1_grade_ppi(P1_PPI),
+  P1_Grade_PPI_alt = p1_grade_ppi(P1_PPI_alt),
+  P1_Grade_CAP = case_when(
+    P1_CAP < 10 ~ "3. Poor - <10%",
+    P1_CAP >= 10 & P1_CAP < 25 ~ "2. Fair - 10-25%",
+    P1_CAP >= 25 ~ "1. Good - >25%"
+  ),
+  P1_Grade_Cutoff = case_when(
+    P1_Cutoff_rate < 1 ~ "1. Good - <1%",
+    P1_Cutoff_rate >= 1 & P1_Cutoff_rate < 10 ~ "2. Fair - 1-10%",
+    P1_Cutoff_rate >= 10 ~ "3. Poo - >10%"
+  ),
+  P1_Grade_Delinquency = case_when(
+    P1_Delinquency_rate < 2.5 ~ "1. Good - <2.5%",
+    P1_Delinquency_rate >= 2.5 & P1_Delinquency_rate <= 14 ~ "2. Fair - 2.5-14%",
+    P1_Delinquency_rate > 14 ~ "3. Poor - >14%"
+  ),
+  P1_Grade_Efficiency = case_when(
+    P1_Efficiency_Program < 1 ~ "3. Poor - <1%",
+    P1_Efficiency_Program >=1 & P1_Efficiency_Program < 5 ~ "2. Fair - 1-5% ",
+    P1_Efficiency_Program >= 5 ~ "1. Good - >5%"
+  ),
+  P1_Grade_Complaints_per1000conn = case_when( 
+      P1_Complaints_per_1000conn < 1.5 ~ "1. Good - <1.5 ",
+      P1_Complaints_per_1000conn >= 1.5 & P1_Complaints_per_1000conn < 6.5 ~ "2. Fair - 1.5-6.5",
+      P1_Complaints_per_1000conn >= 6.5 ~ "3. Poor - >6.5"
+    ),
+  P1_Grade_Complaint_Resolution = 
+    case_when( 
+      P1_Complaint_Resolution > 97 ~ "1. Good - >97%",
+      P1_Complaint_Resolution >= 91 & P1_Complaint_Resolution <= 97 ~ "2. Fair - 91-97%",
+      P1_Complaint_Resolution < 91 ~ "3. Poor - <91%"
+      
+    ),
+  P2_Grade_Staff_Share = case_when(
+      P2_Staff_Share_Ratio > 0.5 ~ "1. Good - >0.5",
+      P2_Staff_Share_Ratio > 0.25 & P2_Staff_Share_Ratio <= 0.5 ~ "2. Fair - 0.25-0.5",
+      P2_Staff_Share_Ratio <= 0.25 ~ "3. Poor - <0.25"
+    ),
+  P3_Grade_Breaks = case_when(
+      P3_Breaks_100mi < 5 ~ "1. Good - <5",
+      P3_Breaks_100mi >= 5 & P3_Breaks_100mi <=20 ~ "2. Fair - 5-20",
+      P3_Breaks_100mi > 20 ~ "3. Poor - >20"
+    ),
+  P3_Grade_SSO = case_when(
+      P3_SSO_100mi < 2 ~ "1. Good - <2",
+      P3_SSO_100mi >= 2 & P3_SSO_100mi <= 10 ~ "2. Fair - 2-10",
+      P3_SSO_100mi > 10 ~ "3. Poor - >10"
+    ),
+  P3_Grade_Lead = case_when(
+    P3_Lead_Lines_Percent == 0 ~ "1. Good - 0%",
+    P3_Lead_Lines_Percent > 0 & P3_Lead_Lines_Percent <= 0.05 ~ "2. Fair - 0-5%",
+    P3_Lead_Lines_Percent > 0.05 ~ "3. Poor - >5%"
+  ),
+  P3_Grade_Lead_Replace = case_when(
+      is.na(P3_Lead_Lines_Replaced_Percent) ~ NA_character_,
+      P3_Lead_Lines_Replaced_Percent <= 0 ~ "3. Poor - 0%",
+      P3_Lead_Lines_Replaced_Percent > 0 &
+        P3_Lead_Lines_Replaced_Percent <= 0.07 ~ "2. Fair - 0-7%",
+      P3_Lead_Lines_Replaced_Percent > 0.07 ~ "1. Good - >7%"
+    ),
+  P3_Grade_Network_Renewal = case_when(
+    P3_Network_Renewal < 0.5 ~ "3. Poor - <0.5%",
+    P3_Network_Renewal >= 0.5 & P3_Network_Renewal <= 2 ~ "2. Fair - 0.5-2%",
+    P3_Network_Renewal > 2 ~ "1. Good >2%"
+  ),
+  
+  P3_Grade_Maintenance = case_when(
+   P3_Maintenance_Hrs_100mi < 650 ~ "3. Poor - <650",
+    P3_Maintenance_Hrs_100mi >= 650 &P3_Maintenance_Hrs_100mi <= 1800 ~ "2. Fair - 650-1800",
+    P3_Maintenance_Hrs_100mi > 1800 ~ "1. Good - >1800"
+  )
+  
+)
+
+P1_tract$Grade_PPI <- p1_grade_ppi(P1_tract$PPI)
+
+
 ```
