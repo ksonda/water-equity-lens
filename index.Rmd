@@ -481,7 +481,7 @@ y2 <- 0.5*x$PC1 + 0.5*x$PC2 + rnorm(length(x$PC1),0,1)
 y3 <- 0.5*x$PC3 + 0.5*x$PC2 + rnorm(length(x$PC1),0,1)
 ```
 
-Now we compute the correlation between each of these simulated indicators and all of the socioeconomic variables. Correlation is measured on a scale between -1 and 1, with values closer to 0 indicating less correlation. The table below shows how each of the three simulated equity indicators are correlated with each of the socioeconomic variables. For example, $y1$ is highly correlated with the percentage of the households below 200% of the Federal Poverty level,Single parent families, and households with no vehicle,  and strongly inversely correlated with income measures, home values, and home ownership rates. $y3$, on the other hand, is most highly correlated with lower levels of linguistic isolation and education levels below high school. This would enable a dynamic insight to be generated, where a user could select an equity indicator, and be shown any relevant descriptions or plots for any associated socioeconomic variables. 
+Now we compute the correlation between each of these simulated indicators and all of the socioeconomic variables. Correlation is measured on a scale between -1 and 1, with values closer to 0 indicating less correlation. The table below shows how each of the three simulated equity indicators are correlated with each of the socioeconomic variables. For example, $y1$ is highly correlated with the percentage of the households below 200% of the Federal Poverty level, Single parent families, and households with no vehicle,  and strongly inversely correlated with income measures, home values, and home ownership rates. $y3$, on the other hand, is most highly correlated with lower levels of linguistic isolation and education levels below high school. This would enable a dynamic insight to be generated, where a user could select an equity indicator, and be shown any relevant descriptions or plots for any associated socioeconomic variables. 
 
 ```{r corr, results="asis"}
 y <- as.data.frame(cbind(y1,y2,y3))
@@ -497,4 +497,10 @@ corrplot(c,
   type = "full",
   order="original"# show only upper side
 )
+```
+Saving our data at the tract and block group level
+```{r save}
+sf::st_write(bg,"data/census_blockgroup_newark.geojson")
+sf::st_write(tr,"data/census_tract_newark.geojson")
+sf::st_write(newark,"data/service_area_newark.geojson")
 ```
