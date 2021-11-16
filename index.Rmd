@@ -25,6 +25,7 @@ library(knitr)
 library(leafsync)
 library(corrplot)
 library(zoo)
+library(missForest)
 census_api_key("b25f8b1b7bf10561c9cbc3a20a4d2572677f1f05")
 options(tigris_use_cache = TRUE)
 
@@ -75,12 +76,12 @@ Cancer Prevention Institute of California, Fremont, California. 2014](https://ca
 
 ## The workflow
 
-First, we take an example service area boundary. In this case the Newark Water Department.
+First, we take an example service area boundary. In this case the Newark Water Department.This comes from an external API but could be read from an arbitrary local or web location.
 
 ```{r, results="asis"}
 #pws <- read_sf("C:/Users/kyleo/Downloads/pws.gpkg")
 #newark <- filter(pws,PWSID=="NJ0714001")
-newark <- read_sf("https://info.geoconnex.us/collections/pws/items/NJ0714001")
+newark <- read_sf("https://geoconnex.us/ref/pws/NJ0714001")
 mapview(newark)
 
 ```
@@ -363,6 +364,61 @@ It also appears that the following variables are not available or otherwise high
 
 If clients are determined to use these variables, tract-level analysis may be necessary, which may not work for custom geographies that need to be assembled from smaller geographies than tracts.
 
+We cannot use public assistance with Census Block Groups, but 20th percentile of income can be calculated from other means, and median home value can be imputed.
+
+### Imputing missing data
+
+We use a random forest missing value imputation algorithm (see [here](https://doi.org/10.1093/bioinformatics/btr597)) to fill in missing data for the purposes of later indexing. Compare median home values in the unimputed vs. imputed datasets
+
+```{r impute, results="asis"}
+imp.bg <- dplyr::select(pcaData.bg,-GEOID,-income_20tile,-percAssistance)
+imp.bg <- missForest(imp.bg)
+imp.bg <- imp.bg$ximp
+imp.bg$GEOID <- pcaData.bg$GEOID
+
+missing <- select(pcaData.bg,GEOID,homeValuemedian)
+imputed <- select(imp.bg,GEOID,homeValuemedian)
+
+imp.demo <- left_join(bg,missing,by="GEOID")
+imp.demo <- left_join(imp.demo,imputed,by="GEOID")
+
+map.miss <- mapview(imp.demo,zcol="homeValuemedian.x",layer.name="Median Home value (NA)")
+map.imp <- mapview(imp.demo,zcol="homeValuemedian.y", layer.name="Median Home Value (imputed)")
+
+sync(map.miss,map.imp)
+
+```
+
+### Alternative boundaries
+
+With all missing data imputed, we can now demonstrate how U.S. Census data can be re-estimated for arbitrary larger geographies. Below, take the example of the City of Newark's [Neighborhood](https://data.ci.newark.nj.us/dataset/neighborhoods2013) boundaries, compared with Census Block Groups.
+
+```{r otherbounds, results="asis"}
+alt <- sf::read_sf("https://data.ci.newark.nj.us/dataset/bb616963-ea12-434e-96c1-526820517a66/resource/d59cbbb5-9762-4063-9c21-fc6fa3e1f787/download/newarkneighborhoods2013.geojson")
+
+ mapview(bg, layer.name= "Census Block Groups") + mapview(alt, alpha.regions=0, col.regions="darkslategrey", lwd=3, color="darkslategrey", layer.name="Alt. Polygons (Neighborhoods)") + mapview(newark, alpha.regions=0, lwd=2, color="black", col.regions="black",layer.name = "Newark Water Service Area")
+
+```
+##### Reweighting for different polygons
+
+In this case, Newarks alternative polygons seem to mostly be combinations of Census Block Groups, with minor discrepancies at borders. Other alternative polygons may be substantially different, so we implement a general weighted-area algorithm to reweight our census variables to the alternative polygon. The principle is the same as that documented [here](https://doi.org/10.1371/journal.pone.0245237.s003). 
+
+
+First, we compute the area of the block groups (projecting to the appropriate state plane projection)
+```{r weight}
+bg <- bg %>% 
+  st_transform(32111) %>% # project to NAD83/New Jersey Projection
+  mutate(area_bg = st_area(.))# compute area
+```
+
+Then we compute the area of the alternative polygons (projecting to the appropriate state plane projection)
+
+```{r weight}
+alt <- alt %>% 
+  st_transform(32111) %>% # project to NAD83/New Jersey Projection
+  mutate(area_alt = st_area(.))# compute area
+```
+
 ```{r inspect}
 skim(pcaData.tr)
 skim(pcaData.bg)
@@ -500,7 +556,7 @@ corrplot(c,
 ```
 Saving our data at the tract and block group level
 ```{r save}
-sf::st_write(bg,"data/census_blockgroup_newark.geojson")
-sf::st_write(tr,"data/census_tract_newark.geojson")
-sf::st_write(newark,"data/service_area_newark.geojson")
+sf::write_sf(bg,"data/census_blockgroup_newark.geojson")
+sf::write_sf(tr,"data/census_tract_newark.geojson")
+sf::write_sf(newark,"data/service_area_newark.geojson")
 ```
