@@ -89,8 +89,8 @@ mapview(newark)
 Then we find the relevant Census Block Groups (orange) or Tracts (green), first downloading the entire state and then subsetting to the utility service area (blue).
 
 ```{r census_boundaries}
-bg <- get_acs(state = "NJ", geography = "block group", variables = "B19013_001", geometry = TRUE) %>% st_transform(4326)
-tr <- get_acs(state = "NJ", geography = "tract", variables = "B19013_001", geometry = TRUE) %>% st_transform(4326)
+bg <- get_acs(state = "NJ", geography = "block group", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
+tr <- get_acs(state = "NJ", geography = "tract", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
 
 bg1 <- st_intersects(bg,newark) %>% as.integer()
 bg <- bg[which(bg1==1),]
@@ -419,33 +419,236 @@ alt <- alt %>%
   mutate(area_alt = st_area(.))# compute area
 ```
 
+Now we compute the spatial intersection of the alternate geometry with the block groups
+
+```{r intersect}
+alt.bg <- sf::st_intersection(alt,bg)
+
+alt.bg <- alt.bg %>% 
+  mutate(area_alt_bg = st_area(.), #calculate area of intersection of block group and alternative polygon
+         share_area = area_alt_bg/area_alt, #calcualte share of area of each block group in each custom polygon
+         pop = share_area * B01001_001E, #calculate population of each intersection
+         hh = share_area * B11016_001E) %>% #calcualte hh of each intersection
+  group_by(Neighborhood) %>% #group calculations by alternate polygon
+  mutate(alt_pop = sum(pop), # calculate population of alternate polygons
+         alt_hh = sum(hh) #calculate hh in alternate polygons
+         ) %>% 
+  ungroup() %>% #ungroup calculations
+  mutate(wgt_pop = pop/alt_pop, #calculate prop of population of alternate polygon represented by each intersection
+         wgt_hh = hh/alt_hh) #calculate prop of hh of alternate polygon represented by each intersection
+
+
+
+```
+Now we can weight every variable by hh and pop weights as appropriate to come up with the alternative polygon measures.
+
+```{r transform}
+imp.bg.long <- pivot_longer(imp.bg,!GEOID,names_to = "var",values_to = "value")
+imp.bg.long <- left_join(imp.bg.long,alt.bg,by="GEOID")
+imp.bg.long$value <- imp.bg.long$value * imp.bg.long$wgt_hh
+imp.bg.long <- select(imp.bg.long,Neighborhood,var,value)
+imp.neigh.long <- imp.bg.long %>% 
+  group_by(Neighborhood,var) %>% 
+  summarise(value=sum(value))
+
+
+alt_polygons <- alt %>% 
+  left_join(imp.neigh.long,by="Neighborhood") %>%
+  select(Neighborhood,var,value)
+
+alt_polygons$alt_polygon_id <- alt_polygons$Neighborhood
+alt_polygons <- select(alt_polygons,alt_polygon_id,var,value)
+
+v <- as.data.frame(unique(alt_polygons$var))
+v$units = c("USD",
+            "USD",
+            "USD",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "%",
+            "ratio",
+            "USD"
+            )
+
+colnames(v) <- c("var","units")
+
+alt_polygons <- na.omit(alt_polygons)
+alt_data <- st_drop_geometry(alt_polygons)
+alt_data <- left_join(alt_data,v,by="var")
+alt_data$value <- as.numeric(alt_data$value)
+alt_polygons <- distinct(select(alt_polygons,alt_polygon_id))
+alt_polygons <- st_transform(alt_polygons,4326)
+
+bg_data <- pivot_longer(imp.bg,!GEOID,names_to = "var",values_to = "value")
+bg_data <- left_join(bg_data,v,by="var")
+bg_polygons <- select(bg,GEOID)
+newark.p <- st_transform(newark,32111)
+bg_polygons <- st_intersection(bg_polygons,newark.p)
+bg_polygons <- select(bg_polygons,GEOID)
+bg_polygons <- st_transform(bg_polygons,4326)
+
+
+bg_data$var <- paste0("census_",bg_data$var)
+alt_data$var <- paste0("census_",alt_data$var)
+
+```
+We do something similar with the block groups as bounded by the service area boundary now. 
+
+
+
 ```{r inspect}
-skim(pcaData.tr)
-skim(pcaData.bg)
+# skim(pcaData.tr)
+# skim(pcaData.bg)
 ```
 
 With this knowledge, we conduct the PCA, first on all the available variables for Block Groups and for Tracts. Below, we report on the first three principal components of the PCA for the tracts and block groups.
 
 ```{r transform, warning=FALSE, message=FALSE}
-is.nan.data.frame <- function(x)
-do.call(cbind, lapply(x, is.nan))
+# is.nan.data.frame <- function(x)
+# do.call(cbind, lapply(x, is.nan))
+# 
+# pcaData.bg[is.nan(pcaData.bg)]<-NA
+# x=select(pcaData.bg,-GEOID,-percAssistance, -income_20tile)
 
-pcaData.bg[is.nan(pcaData.bg)]<-NA
-x=select(pcaData.bg,-GEOID,-percAssistance, -income_20tile)
-pca.bg <- prcomp(x=na.omit(x), scale=TRUE, center=TRUE, na.action=na.omit, rank=3)
-y<-predict(pca.bg,pcaData.bg)
-pcaData.bg$PC1_allVars <- y[,1]
+bg_data_wide <- bg_data %>% pivot_wider(id_cols=GEOID,names_from = var, values_from = value)
+pca.matrix.bg <- bg_data_wide %>% select(-GEOID)
+pca.bg <- prcomp(pca.matrix.bg, scale=TRUE, center=TRUE, na.action=na.omit, rank=3)
+bg_data_wide$PC1 <- pca.bg$x[,1]
+bg_data <- pivot_longer(bg_data_wide,!GEOID,names_to = "var",values_to = "value")
 
-pcaData.tr[is.nan(pcaData.tr)]<-NA
-x=select(pcaData.tr,-GEOID)
-pca.tr <- prcomp(x=na.omit(x), scale=TRUE, center=TRUE, na.action=na.omit, rank=3)
-y<-predict(pca.tr,pcaData.tr)
-pcaData.tr$PC1_allVars <- y[,1]
-pcaData.tr$PC1 <- y[,1]
-pcaData.tr$PC2 <- y[,2]
-pcaData.tr$PC3 <- y[,2]
 
+alt_data_wide <- alt_data %>% distinct(alt_polygon_id,var,.keep_all=TRUE) %>% pivot_wider(id_cols=alt_polygon_id,names_from = var, values_from = value)
+
+pca.matrix.alt <- alt_data_wide %>% select(-alt_polygon_id)
+pca.alt <- prcomp(pca.matrix.alt, scale=TRUE, center=TRUE, na.action=na.omit, rank=3)
+alt_data_wide$PC1 <- pca.alt$x[,1]
+alt_data <- pivot_longer(alt_data_wide,!alt_polygon_id,names_to = "var",values_to = "value")
+v$var <- paste0("census_",v$var)
+alt_data <- left_join(alt_data,v,by="var")
+
+st_write(alt_polygons,"finalData/alt_polygons.geojson")
+st_write(bg_polygons,"finaldata/bg_polygons.geojson")
+
+
+overall <- left_join(bg_data,select(bg,GEOID,B01001_001E),by="GEOID")
+overall <- st_as_sf(overall)
+overall$area_bg <- st_area(overall)
+overall <- st_intersection(overall,select(newark.p,id))
+overall$area_intersection <- st_area(overall)
+overall$area_share <- overall$area_intersection/overall$area_bg
+overall$wgt <- (overall$area_share * overall$B01001_001E) / sum(bg$B01001_001E)
+overall$value <- overall$value * overall$wgt
+
+overall <- overall %>% st_drop_geometry() %>% group_by(var) %>% summarise(value=sum(value))
+
+st_write(newark,"finaldata/overall_polygon.geojson")
 ```
+
+#### Add other variables
+
+Let's create a vector of all the other variables that might be there:
+
+```{r}
+year <- c(2019,2020)
+var <- c("pillar1_hbi",
+         "pillar1_ppi",
+         "pillar1_affordability_score",
+         "pillar1_cutoff",
+         "pillar1_cap",
+         "pillar1_connections_water",
+         "pillar1_connections_sewer",
+         "pillar2_workforce",
+         "pillar2_diversity_1",
+         "pillar2_diversity_2",
+         "pillar2_procurement",
+         "pillar2_training",
+         "pillar2_park_distance",
+         "pillar2_park_density",
+         "pillar2_park_walk_access",
+         "pillar2_waterfront_acess",
+         "pillar2_public_facing",
+         "pillar3_uri",
+         "pillar3_breaks",
+         "pillar3_sewer_failures",
+         "pillar3_lead_lines",
+         "pillar3_lead_line_replacement",
+         "pillar3_proactive_maintenance",
+         "pillar3_outreach",
+         "pillar3_meetings",
+         "pillar3_water_board",
+         "pillar3_flooding",
+         "pillar3_complaints"
+         )
+
+geo_type <- c("block_group","alternate","service_area")
+
+geo_id <- unique(bg_data$GEOID)
+geo_id <- as.data.frame(c(geo_id,unique(alt_data$alt_polygon_id)))
+geo_id <- rbind(geo_id,"NJ0714001")
+
+colnames(geo_id)[1] <- "geo_id"
+
+pillars <- expand_grid(geo_id,year,var) 
+pillars$geo_type <- "block_group"
+pillars$geo_type[15345:16408] <- "alternate"
+pillars$geo_type[16409:16520] <- "service_area"
+
+pillars$units <- "%"
+pillars$units[which(pillars$var %in% c("pillar1_hbi",
+                                       "pillar2_workforce",
+                                       "pillar2_public_facing",
+                                       "pillar3_breaks",
+                                       "pillar3_sewer_failures"))] <- "ratio"
+
+
+pillars <- pillars %>% group_by(var,year) %>% mutate(value=runif(1))
+pillars$value[which(pillars$units=="%")] <- 100*pillars$value[which(pillars$units=="%")]
+
+pillars <- pillars %>% 
+  arrange(geo_id,var,year) %>% 
+  group_by(geo_id,var) %>% mutate(delta_percent = 100*(value - lag(value))/lag(value)) %>% ungroup()
+
+pillars <- select(pillars,geo_id,geo_type,year,var,value,units,delta_percent)
+
+write_csv(pillars,"finalData/indicators.csv")
+
+bg_data2 <- left_join(bg_data,v,by="var")
+
+alt_data$geo_type <- "alternate"
+alt_data$geo_id <- alt_data$alt_polygon_id
+alt_data <- select(alt_data,geo_id,geo_type,var,value_units)
+
+bg_data2$geo_type <- "block_group"
+bg_data2$geo_id <- bg_data2$GEOID
+bg_data2 <- select(bg_data2,geo_id,geo_type,var,value_units)
+
+overall$geo_id <- "NJ0714001"
+overall$geo_type <- "service_area"
+overall$value <- as.numeric(overall$value)
+overall2 <- left_join(overall,v,by="var")
+overall2 <- select(overall2,geo_id,geo_type,var,value,units)
+
+census <- bind_rows(bg_data2,alt_data,overall2)
+census$year <- 2019
+census <- select(census,geo_id,geo_type,year,var,value,units)
+
+x = bg_data2 %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+y = pillars %>% mutate(value=runif(n=16520)) %>% filter(geo_type=="block_group" & year == 2019)  %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+c <- cor(x=x,y=y)
+c <- as.data.frame(c)
+
+write_csv(census,"finalData/census.csv")
+```
+
 
 ## Results 
 
