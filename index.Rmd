@@ -652,7 +652,7 @@ c <- as.data.frame(c)
 c$census_var <- rownames(c)
 c <- pivot_longer(c,cols=pillar1_affordability_score:pillar3_water_board ,names_to = "variable", values_to="corr")
 
-write.csv(c,"finalData/correlations.csv")
+write_csv(c,"finalData/correlations.csv")
 
 write_csv(census,"finalData/census.csv")
 ```
