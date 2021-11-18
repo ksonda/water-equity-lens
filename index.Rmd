@@ -619,6 +619,10 @@ pillars <- pillars %>%
 
 pillars <- select(pillars,geo_id,geo_type,year,var,value,units,delta_percent)
 
+pillars$units[which(pillars$var=="pillar1_affordability_score")] <- "character"
+pillars$value[which(pillars$var=="pillar1_affordability_score")] <- sample(c("Low","Medium","High"),590,replace=TRUE)
+pillars$delta_percent[which(pillars$units=="character")]<-NA
+
 write_csv(pillars,"finalData/indicators.csv")
 
 bg_data2 <- left_join(bg_data,v,by="var")
@@ -645,6 +649,10 @@ x = bg_data2 %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id
 y = pillars %>% mutate(value=runif(n=16520)) %>% filter(geo_type=="block_group" & year == 2019)  %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
 c <- cor(x=x,y=y)
 c <- as.data.frame(c)
+c$census_var <- rownames(c)
+c <- pivot_longer(c,cols=pillar1_affordability_score:pillar3_water_board ,names_to = "variable", values_to="corr")
+
+write.csv(c,"finalData/correlations.csv")
 
 write_csv(census,"finalData/census.csv")
 ```
