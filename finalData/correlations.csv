@@ -1,4 +1,4 @@
-census_var,variable,corr
+census_var,indicator,corr
 census_percBelow200FPL,pillar1_affordability_score,0.01985920273675787
 census_percBelow200FPL,pillar1_cap,0.09623751350649323
 census_percBelow200FPL,pillar1_connections_sewer,-0.04935546974242753
