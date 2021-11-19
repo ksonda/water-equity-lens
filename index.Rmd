@@ -537,8 +537,8 @@ alt_data <- left_join(alt_data,v,by="var")
 
 colnames(alt_polygons)[1]<-"geo_id"
 colnames(bg_polygons)[1]<-"geo_id"
-write_sf(alt_polygons,"finalData/alt_polygons.geojson")
-write_sf(bg_polygons,"finaldata/bg_polygons.geojson")
+write_sf(alt_polygons,"finalData/alternate.geojson")
+write_sf(bg_polygons,"finaldata/block_group.geojson")
 
 
 overall <- left_join(bg_data,select(bg,GEOID,B01001_001E),by="GEOID")
@@ -554,7 +554,7 @@ overall <- overall %>% st_drop_geometry() %>% group_by(var) %>% summarise(value=
 
 n <- newark %>% select(id)
 colnames(n)[1]<-"geo_id"
-write_sf(newark,"finaldata/overall_polygon.geojson")
+write_sf(n,"finaldata/service_area.geojson")
 ```
 
 #### Add other variables
