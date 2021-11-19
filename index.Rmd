@@ -552,7 +552,9 @@ overall$value <- overall$value * overall$wgt
 
 overall <- overall %>% st_drop_geometry() %>% group_by(var) %>% summarise(value=sum(value))
 
-st_write(newark,"finaldata/overall_polygon.geojson")
+n <- newark %>% select(id)
+colnames(n)[1]<-"geo_id"
+write_sf(newark,"finaldata/overall_polygon.geojson")
 ```
 
 #### Add other variables
