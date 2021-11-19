@@ -535,8 +535,10 @@ alt_data <- pivot_longer(alt_data_wide,!alt_polygon_id,names_to = "var",values_t
 v$var <- paste0("census_",v$var)
 alt_data <- left_join(alt_data,v,by="var")
 
-st_write(alt_polygons,"finalData/alt_polygons.geojson")
-st_write(bg_polygons,"finaldata/bg_polygons.geojson")
+colnames(alt_polygons)[1]<-"geo_id"
+colnames(bg_polygons)[1]<-"geo_id"
+write_sf(alt_polygons,"finalData/alt_polygons.geojson")
+write_sf(bg_polygons,"finaldata/bg_polygons.geojson")
 
 
 overall <- left_join(bg_data,select(bg,GEOID,B01001_001E),by="GEOID")
