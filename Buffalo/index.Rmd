@@ -602,14 +602,24 @@ geo_type <- c("block_group","alternate","service_area")
 
 geo_id <- unique(bg_data$GEOID)
 geo_id <- as.data.frame(c(geo_id,unique(alt_data$alt_polygon_id)))
-geo_id <- rbind(geo_id,"NJ0714001")
+geo_id <- rbind(geo_id,name)
 
 colnames(geo_id)[1] <- "geo_id"
 
 pillars <- expand_grid(geo_id,year,var) 
+
+l_id <- length(geo_id[,1])
+l_bg <- length(unique(bg_data$GEOID))
+l_alt <- length(unique(alt_data$alt_polygon_id))
+l_vars <- length(var)
+l_year <- length(year)
+
+l_bg <- l_bg*l_vars*l_year
+l_alt <- l_alt*l_vars*l_year
+
 pillars$geo_type <- "block_group"
-pillars$geo_type[15345:16408] <- "alternate"
-pillars$geo_type[16409:16520] <- "service_area"
+pillars$geo_type[(l_bg+1):(l_bg+l_alt)] <- "alternate"
+pillars$geo_type[(l_bg+l_alt+1):length(pillars$geo_type)] <- "service_area"
 
 pillars$units <- "%"
 pillars$units[which(pillars$var %in% c("pillar1_hbi",
@@ -619,7 +629,7 @@ pillars$units[which(pillars$var %in% c("pillar1_hbi",
                                        "pillar3_sewer_failures"))] <- "ratio"
 
 
-pillars <- pillars %>% group_by(var,year) %>% mutate(value=runif(1))
+pillars <- pillars %>% group_by(var,year,geo_id) %>% mutate(value=runif(1))
 pillars$value[which(pillars$units=="%")] <- 100*pillars$value[which(pillars$units=="%")]
 
 pillars <- pillars %>% 
@@ -629,16 +639,30 @@ pillars <- pillars %>%
 pillars <- select(pillars,geo_id,geo_type,year,var,value,units,delta_percent)
 
 pillars$units[which(pillars$var=="pillar1_affordability_score")] <- "character"
-pillars$value[which(pillars$var=="pillar1_affordability_score")] <- sample(c("Low","Medium","High"),590,replace=TRUE)
+pillars$value[which(pillars$var=="pillar1_affordability_score")] <- sample(c("Low","Medium","High"),length(pillars$var[which(pillars$var=="pillar1_affordability_score")]),replace=TRUE)
 pillars$delta_percent[which(pillars$units=="character")]<-NA
 
 # This will need to be its own code block customized for each variable
-pillars$indicator_bucket <- sample(c("High","Medium","Low"),length(pillars$geo_id),replace=TRUE)
+pillars$var_bucket <- sample(c("High","Medium","Low"),length(pillars$geo_id),replace=TRUE)
 
 #wewaf
 qe <- pillars %>% 
-  group_by(geo_type,var,year)%>%
-  summarise(delta_quartile=gtools::quantcut(delta_percent,q=4,na.rm=TRUE))  
+  group_by(geo_type,var,year) %>%
+  summarise(delta_quartile=quantile(delta_percent,
+                                    probs=c(0.25,0.5,0.75),na.rm=TRUE), 
+            q=c("p25","p50","p75")) %>%
+  pivot_wider(names_from=q, values_from=delta_quartile)
+
+qe <- left_join(pillars,qe,by=c("geo_type","var","year"))
+qe$delta_quartile = NA
+qe <- qe %>% mutate(
+  delta_quartile = case_when(delta_percent <= p25 ~ 1,
+                             delta_percent > p25 & delta_percent <= p50 ~ 2,
+                             delta_percent > p50 & delta_percent <= p75 ~ 3,
+                             delta_percent > p75 ~ 4)
+)
+
+pillars <- qe %>% select(geo_id,geo_type,year,var,units,value,var_bucket,delta_percent,delta_quartile)
 
 write_csv(pillars,"finalData/indicators.csv")
 
@@ -652,7 +676,7 @@ bg_data2$geo_type <- "block_group"
 bg_data2$geo_id <- bg_data2$GEOID
 bg_data2 <- select(bg_data2,geo_id,geo_type,var,value_units)
 
-overall$geo_id <- "NJ0714001"
+overall$geo_id <- name
 overall$geo_type <- "service_area"
 overall$value <- as.numeric(overall$value)
 overall2 <- left_join(overall,v,by="var")
@@ -662,8 +686,10 @@ census <- bind_rows(bg_data2,alt_data,overall2)
 census$year <- 2019
 census <- select(census,geo_id,geo_type,year,var,value,units)
 
-x = bg_data2 %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
-y = pillars %>% mutate(value=runif(n=16520)) %>% filter(geo_type=="block_group" & year == 2019)  %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+x = census %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+
+y = pillars %>% mutate(value=runif(n=length(pillars$geo_type))) %>% filter(geo_type=="block_group" & year == 2020)  %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+
 c <- cor(x=x,y=y)
 c <- as.data.frame(c)
 c$census_var <- rownames(c)
