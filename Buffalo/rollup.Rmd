@@ -1,0 +1,96 @@
+---
+title: "Generate Templates"
+author: "Kyle Onda"
+date: "10/31/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+newark <- sf::read_sf("data/service_area_newark.geojson")
+```
+
+# Purpose
+
+Here we produce some simulated data for templates that may be filled out by utilities
+
+## Simulate templates
+
+First we simulate some template data:
+
+### Access
+
+#### Water and Sewer Account Sheets
+```{r}
+water_accounts <- st_as_sf(sf::st_sample(newark,10000))
+water_accounts$Year <- 2020
+water_accounts$Water_Account_Identifier <- seq.int(nrow(water_accounts))
+water_accounts$Latitude <- as.data.frame(sf::st_coordinates(water_accounts))$Y
+water_accounts$Longitude <- as.data.frame(sf::st_coordinates(water_accounts))$X
+water_accounts <- st_drop_geometry(water_accounts)
+write_csv(water_accounts,"data/simulate/access/water_accounts.csv",append=FALSE)
+write_csv(water_accounts,"data/simulate/access/sewer_accounts.csv",append=FALSE)
+```
+
+#### HBIPPI
+
+```{r}
+hbippi <- water_accounts
+start_date <- as.data.frame(seq(as.Date("2020-01-01"), as.Date("2020-12-01"), by="months"))
+colnames(start_date) = "Billing_Start_date"
+start_date$Billing_end_date = start_date$Billing_Start_date + 30
+
+hbippi <- left_join(hbippi,start_date,by = character())
+
+hbippi$Volume_Water <- rlnorm(10000,meanlog=log(2))
+
+hbippi$Bill_amount <- 10 + 4*hbippi$Volume_Water
+
+hbippi$Latitude <- NULL
+hbippi$Longitude <- NULL
+hbippi$Billing_Start_date <- as.character(hbippi$Billing_Start_date)
+write_csv(hbippi,"data/simulate/access/hbippi.csv",append=FALSE)
+
+
+```
+
+#### cutoff_indicator
+
+```{r}
+cutoff <- hbippi
+cutoff$id <- seq.int(nrow(cutoff))
+cutoff <- cutoff %>% filter(id %in% sample(cutoff$id,100))
+cutoff$Cutoff_date <- cutoff$Billing_end_date+30
+cutoff <- cutoff %>% select(Water_Account_Identifier,Cutoff_date)
+write_csv(cutoff,"data/simulate/access/cutoff.csv")
+```
+
+#### CAP
+
+```{r}
+cap <- water_accounts
+eligible <- sample(cap$Water_Account_Identifier,2000)
+enrolled <- sample(eligible,400)
+
+
+cap$Eligible <- "No"
+cap$Enrolled <- "No"
+
+cap$Eligible[which(cap$Water_Account_Identifier %in% eligible)] <- "Yes"
+cap$Enrolled[which(cap$Water_Account_Identifier %in% eligible)] <- "Yes"
+write_csv(cap,"data/simulate/access/cap.csv")
+```
+
+### Benefit
+
+#### workforce
+
+```{r}
+
+
+```
+
+## Roll up 
+
+### Access
+
