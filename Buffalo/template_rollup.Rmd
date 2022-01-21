@@ -1,0 +1,67 @@
+---
+title: "Template rollup"
+author: "Kyle Onda"
+date: "11/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+library(readxl)
+```
+
+# Purpose
+
+Here we demonstrate how to "roll up" submitted data from templates and create Equity Indicators for arbitraty spatial boundaries.
+
+## Access
+
+First, we merge in the census data that has already been produced at the Census Block Group Level (lowest level possible for most sociodemographic variables of interest). This data has already been processed for the Newark, NJ water system in `index.Rmd`
+
+```{r ingest}
+newark <- sf::read_sf("data/service_area_newark.geojson")
+bg <- sf::read_sf("data/census_blockgroup_newark.geojson")
+tr <- sf::read_sf("data/census_tract_newark.geojson")
+
+inc <- tr %>% select(income_20tile)
+bg$income_20tile <- NULL
+bg2 <- st_join(bg,inc,largest=TRUE)
+```
+
+### Read in and summarize data by area
+
+```{r connections}
+connections <- read_excel("data/Newark_Access.xlsx",
+                          sheet=2,
+                          skip = 3)
+
+connections <- st_as_sf(connections,coords=c("Longitude:","Latitude:"))
+connections$`Water_Account_Identifier:` <- as.character(connections$`Water_Account_Identifier:`)
+
+hbippi <- read_excel("data/Newark_Access.xlsx",
+                          sheet=4,
+                          skip = 2) %>% mutate(Year = lubridate::year(as.Date(`Billing_Start_date (YYYY-MM-DD):`))) %>% group_by(`Water_account_identifier:`,Year) %>% summarise(mean_volume = mean(as.numeric(`Volume_Water (1000 gal):`)),
+                                                                                                                                                                                 expenditure = sum(as.numeric(`Bill_amount (US$):`)))
+
+cutoffs <- read_excel("data/Newark_Access.xlsx",
+                          sheet=5,
+                          skip = 1) %>% 
+  group_by(`Water_account_identifier:`) %>% add_tally() %>% dplyr::distinct(`Water_account_identifier:`,.keep_all=TRUE) %>% mutate(cut_off = n>=1) %>% select(`Water_account_identifier:`,cut_off) %>% ungroup()
+
+
+cap <- read_excel("data/Newark_Access.xlsx",
+                          sheet=6,
+                          skip = 2) 
+cap$`Water_Account_Identifier:` <- as.character(cap$`Water_Account_Identifier:`)
+
+connections <- connections %>% 
+left_join(cutoffs,by=c("Water_Account_Identifier:"="Water_account_identifier:")) %>% left_join(cap, by=c("Water_Account_Identifier:", "Year (YYYY):"="Year (YYYY):")) %>% left_join(hbippi, by=c("Water_Account_Identifier:"="Water_account_identifier:"))
+```
+```{r merge}
+bg_id <- select(bg,GEOID)
+tr_id <- select(tr,GEOID)
+data <- connections %>% st_join(bg2)
+
+```
