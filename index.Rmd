@@ -76,29 +76,31 @@ Cancer Prevention Institute of California, Fremont, California. 2014](https://ca
 
 ## The workflow
 
-First, we take an example service area boundary. In this case the Newark Water Department.This comes from an external API but could be read from an arbitrary local or web location.
+First, we take an example service area boundary. In this case the Buffalo municipal boundary. This could come from an external API but in this case comes from a local file. We re-project to WGS84 just to be standard to begin with.
 
 ```{r, results="asis"}
 #pws <- read_sf("C:/Users/kyleo/Downloads/pws.gpkg")
 #newark <- filter(pws,PWSID=="NJ0714001")
-newark <- read_sf("https://geoconnex.us/ref/pws/NJ0714001")
-mapview(newark)
+boundary <- sf::read_sf("data/geospatial_data/COB_municipal_boundary.shp") %>% st_transform(4326)
+mapview(boundary)
 
+state <- "NY"
+name <- "Buffalo"
 ```
 
-Then we find the relevant Census Block Groups (orange) or Tracts (green), first downloading the entire state and then subsetting to the utility service area (blue).
+Then we find the relevant Census Block Groups (orange) or Tracts (green), first downloading the entire state and then subsetting to the utility service area (blue). We
 
 ```{r census_boundaries}
-bg <- get_acs(state = "NJ", geography = "block group", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
-tr <- get_acs(state = "NJ", geography = "tract", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
+bg <- get_acs(state = state, geography = "block group", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
+tr <- get_acs(state = state, geography = "tract", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
 
-bg1 <- st_intersects(bg,newark) %>% as.integer()
+bg1 <- st_intersects(bg,boundary) %>% as.integer()
 bg <- bg[which(bg1==1),]
 
-tr1 <- st_intersects(tr,newark) %>% as.integer()
+tr1 <- st_intersects(tr,boundary) %>% as.integer()
 tr <- tr[which(tr1==1),]
 
-mapview(newark, layer.name="Newark Water Department", map.types= "OpenStreetMap") +
+mapview(boundary, layer.name=name, map.types= "OpenStreetMap") +
   mapview(bg, alpha.regions=0, color="orange", col.regions="orange",lwd=2, layer.name="Block Groups", map.types= "OpenStreetMap") +
   mapview(tr, alpha.regions=0, color="green",col.regions="green", lwd=3, layer.name="Tracts", map.types= "OpenStreetMap") 
 
@@ -205,7 +207,7 @@ counties <- tidycensus::get_acs(year=2019,
                                 variables = "B01001_001",
                                 geometry = TRUE)  %>% 
   sf::st_transform(4326) %>%
-  dplyr::filter(lengths(sf::st_intersects(., newark)) > 0)
+  dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
 
 # Find FIPS code for relevant state and counties, make sure no duplicates
 st <- unique(substr(counties$GEOID,1,2)) 
@@ -394,20 +396,22 @@ sync(map.miss,map.imp)
 With all missing data imputed, we can now demonstrate how U.S. Census data can be re-estimated for arbitrary larger geographies. Below, take the example of the City of Newark's [Neighborhood](https://data.ci.newark.nj.us/dataset/neighborhoods2013) boundaries, compared with Census Block Groups.
 
 ```{r otherbounds, results="asis"}
-alt <- sf::read_sf("https://data.ci.newark.nj.us/dataset/bb616963-ea12-434e-96c1-526820517a66/resource/d59cbbb5-9762-4063-9c21-fc6fa3e1f787/download/newarkneighborhoods2013.geojson")
+alt <- sf::read_sf("data/geospatial_data/COB_council_distrcits.shp") %>% st_transform(4326)
 
- mapview(bg, layer.name= "Census Block Groups") + mapview(alt, alpha.regions=0, col.regions="darkslategrey", lwd=3, color="darkslategrey", layer.name="Alt. Polygons (Neighborhoods)") + mapview(newark, alpha.regions=0, lwd=2, color="black", col.regions="black",layer.name = "Newark Water Service Area")
+ mapview(bg, layer.name= "Census Block Groups") + mapview(alt, alpha.regions=0, col.regions="darkslategrey", lwd=3, color="darkslategrey", layer.name="Alt. Polygons (Neighborhoods)") + mapview(boundary, alpha.regions=0, lwd=2, color="black", col.regions="black",layer.name = name)
 
 ```
 ##### Reweighting for different polygons
 
-In this case, Newarks alternative polygons seem to mostly be combinations of Census Block Groups, with minor discrepancies at borders. Other alternative polygons may be substantially different, so we implement a general weighted-area algorithm to reweight our census variables to the alternative polygon. The principle is the same as that documented [here](https://doi.org/10.1371/journal.pone.0245237.s003). 
+In this case, Buffalo's alternative polygons seem to mostly be combinations of Census Block Groups, with minor discrepancies at borders. Other alternative polygons may be substantially different, so we implement a general weighted-area algorithm to reweight our census variables to the alternative polygon. The principle is the same as that documented [here](https://doi.org/10.1371/journal.pone.0245237.s003). 
 
 
 First, we compute the area of the block groups (projecting to the appropriate state plane projection)
 ```{r weight}
+prj <- 2830
+
 bg <- bg %>% 
-  st_transform(32111) %>% # project to NAD83/New Jersey Projection
+  st_transform(prj) %>% # project to NAD83/New York West Projection
   mutate(area_bg = st_area(.))# compute area
 ```
 
@@ -415,13 +419,15 @@ Then we compute the area of the alternative polygons (projecting to the appropri
 
 ```{r weight}
 alt <- alt %>% 
-  st_transform(32111) %>% # project to NAD83/New Jersey Projection
+  st_transform(prj) %>% # project to NAD83/New York West Projection
   mutate(area_alt = st_area(.))# compute area
+
 ```
 
 Now we compute the spatial intersection of the alternate geometry with the block groups
 
 ```{r intersect}
+alt_name = "district" #here we set the name of the alternate geometry
 alt.bg <- sf::st_intersection(alt,bg)
 
 alt.bg <- alt.bg %>% 
@@ -429,7 +435,7 @@ alt.bg <- alt.bg %>%
          share_area = area_alt_bg/area_alt, #calcualte share of area of each block group in each custom polygon
          pop = share_area * B01001_001E, #calculate population of each intersection
          hh = share_area * B11016_001E) %>% #calcualte hh of each intersection
-  group_by(Neighborhood) %>% #group calculations by alternate polygon
+  group_by(DIST_ID) %>% #group calculations by alternate polygon
   mutate(alt_pop = sum(pop), # calculate population of alternate polygons
          alt_hh = sum(hh) #calculate hh in alternate polygons
          ) %>% 
@@ -446,18 +452,18 @@ Now we can weight every variable by hh and pop weights as appropriate to come up
 imp.bg.long <- pivot_longer(imp.bg,!GEOID,names_to = "var",values_to = "value")
 imp.bg.long <- left_join(imp.bg.long,alt.bg,by="GEOID")
 imp.bg.long$value <- imp.bg.long$value * imp.bg.long$wgt_hh
-imp.bg.long <- select(imp.bg.long,Neighborhood,var,value)
+imp.bg.long <- select(imp.bg.long,District,var,value)
 imp.neigh.long <- imp.bg.long %>% 
-  group_by(Neighborhood,var) %>% 
+  group_by(District,var) %>%  #change depending on alt polygon name
   summarise(value=sum(value))
 
 
 alt_polygons <- alt %>% 
-  left_join(imp.neigh.long,by="Neighborhood") %>%
-  select(Neighborhood,var,value)
+  left_join(imp.neigh.long,by="District") %>% #change depending on alt polygon name
+  select(District,var,value)#change depending on alt polygon name
 
-alt_polygons$alt_polygon_id <- alt_polygons$Neighborhood
-alt_polygons <- select(alt_polygons,alt_polygon_id,var,value)
+alt_polygons$alt_polygon_id <- alt_polygons$District #change depending on alt polygon name
+alt_polygons <- select(alt_polygons,alt_polygon_id,var,value) 
 
 v <- as.data.frame(unique(alt_polygons$var))
 v$units = c("USD",
@@ -491,8 +497,8 @@ alt_polygons <- st_transform(alt_polygons,4326)
 bg_data <- pivot_longer(imp.bg,!GEOID,names_to = "var",values_to = "value")
 bg_data <- left_join(bg_data,v,by="var")
 bg_polygons <- select(bg,GEOID)
-newark.p <- st_transform(newark,32111)
-bg_polygons <- st_intersection(bg_polygons,newark.p)
+boundary.p <- st_transform(boundary,prj) #change based on state plane
+bg_polygons <- st_intersection(bg_polygons,boundary.p)
 bg_polygons <- select(bg_polygons,GEOID)
 bg_polygons <- st_transform(bg_polygons,4326)
 
@@ -544,7 +550,7 @@ write_sf(bg_polygons,"finaldata/block_group.geojson")
 overall <- left_join(bg_data,select(bg,GEOID,B01001_001E),by="GEOID")
 overall <- st_as_sf(overall)
 overall$area_bg <- st_area(overall)
-overall <- st_intersection(overall,select(newark.p,id))
+overall <- st_intersection(overall,select(boundary.p,id))
 overall$area_intersection <- st_area(overall)
 overall$area_share <- overall$area_intersection/overall$area_bg
 overall$wgt <- (overall$area_share * overall$B01001_001E) / sum(bg$B01001_001E)
@@ -552,35 +558,31 @@ overall$value <- overall$value * overall$wgt
 
 overall <- overall %>% st_drop_geometry() %>% group_by(var) %>% summarise(value=sum(value))
 
-n <- newark %>% select(id)
+n <- boundary %>% select(OBJECTID)
 colnames(n)[1]<-"geo_id"
 write_sf(n,"finaldata/service_area.geojson")
 ```
 
-#### Add other variables
+#### Simulate Indicator Variables
 
-Let's create a vector of all the other variables that might be there:
+First, we create a vector of the indicator variables that are in the [data dictionary](data/WEL data dictionary_r2.xlsx), and then create an empty data frame encompassing all polygons and these variables, iterated over years of choice.
 
 ```{r}
-year <- c(2019,2020)
+year <- c(2010,2020)
 var <- c("pillar1_hbi",
          "pillar1_ppi",
-         "pillar1_affordability_score",
+         "pillar1_affordability",
          "pillar1_cutoff",
          "pillar1_cap",
          "pillar1_connections_water",
          "pillar1_connections_sewer",
          "pillar2_workforce",
          "pillar2_diversity_1",
-         "pillar2_diversity_2",
          "pillar2_procurement",
          "pillar2_training",
          "pillar2_park_distance",
-         "pillar2_park_density",
          "pillar2_park_walk_access",
          "pillar2_waterfront_acess",
-         "pillar2_public_facing",
-         "pillar3_uri",
          "pillar3_breaks",
          "pillar3_sewer_failures",
          "pillar3_lead_lines",
@@ -593,18 +595,28 @@ var <- c("pillar1_hbi",
          "pillar3_complaints"
          )
 
-geo_type <- c("block_group","alternate","service_area")
+geo_type <- c("block_group",alt_name,"service_area")
 
 geo_id <- unique(bg_data$GEOID)
 geo_id <- as.data.frame(c(geo_id,unique(alt_data$alt_polygon_id)))
-geo_id <- rbind(geo_id,"NJ0714001")
+geo_id <- rbind(geo_id,name)
 
 colnames(geo_id)[1] <- "geo_id"
 
 pillars <- expand_grid(geo_id,year,var) 
+
+l_id <- length(geo_id[,1])
+l_bg <- length(unique(bg_data$GEOID))
+l_alt <- length(unique(alt_data$alt_polygon_id))
+l_vars <- length(var)
+l_year <- length(year)
+
+l_bg <- l_bg*l_vars*l_year
+l_alt <- l_alt*l_vars*l_year
+
 pillars$geo_type <- "block_group"
-pillars$geo_type[15345:16408] <- "alternate"
-pillars$geo_type[16409:16520] <- "service_area"
+pillars$geo_type[(l_bg+1):(l_bg+l_alt)] <- alt_name
+pillars$geo_type[(l_bg+l_alt+1):length(pillars$geo_type)] <- "service_area"
 
 pillars$units <- "%"
 pillars$units[which(pillars$var %in% c("pillar1_hbi",
@@ -614,21 +626,67 @@ pillars$units[which(pillars$var %in% c("pillar1_hbi",
                                        "pillar3_sewer_failures"))] <- "ratio"
 
 
-pillars <- pillars %>% group_by(var,year) %>% mutate(value=runif(1))
+pillars <- pillars %>% group_by(var,year,geo_id) %>% mutate(value=runif(1))
 pillars$value[which(pillars$units=="%")] <- 100*pillars$value[which(pillars$units=="%")]
+
+```
+
+Below, we calculate the percent change year-over-year in the indicators for each polygon, where applicable
+
+```{r}
 
 pillars <- pillars %>% 
   arrange(geo_id,var,year) %>% 
-  group_by(geo_id,var) %>% mutate(delta_percent = 100*(value - lag(value))/lag(value)) %>% ungroup()
+  group_by(geo_id,var) %>% 
+  mutate(delta_percent = 100*(value - lag(value))/lag(value)) %>% 
+  ungroup()
 
 pillars <- select(pillars,geo_id,geo_type,year,var,value,units,delta_percent)
 
-pillars$units[which(pillars$var=="pillar1_affordability_score")] <- "character"
-pillars$value[which(pillars$var=="pillar1_affordability_score")] <- sample(c("Low","Medium","High"),590,replace=TRUE)
-pillars$delta_percent[which(pillars$units=="character")]<-NA
+pillars$units[which(pillars$var=="pillar1_affordability")] <- "character"
+pillars$value[which(pillars$var=="pillar1_affordability")] <- sample(c("Low","Medium","High"),length(pillars$var[which(pillars$var=="pillar1_affordability")]),replace=TRUE)
+pillars$delta_percent[which(pillars$units=="character")]<-NA 
+
+```
+
+Here, we 
+
+```{r}
+
+# This will need to be its own code block customized for each variable
+pillars$var_bucket <- sample(c("High","Medium","Low"),length(pillars$geo_id),replace=TRUE)
+```
+
+Below, we calculate an indicator variable for which quartile a given polygon's percent change (delta_percent) is. 
+
+```{r}
+#wewaf
+qe <- pillars %>% 
+  group_by(geo_type,var,year) %>%
+  summarise(delta_quartile=quantile(delta_percent,
+                                    probs=c(0.25,0.5,0.75),na.rm=TRUE), 
+            q=c("p25","p50","p75")) %>%
+  pivot_wider(names_from=q, values_from=delta_quartile)
+
+qe <- left_join(pillars,qe,by=c("geo_type","var","year"))
+qe$delta_quartile = NA
+qe <- qe %>% mutate(
+  delta_quartile = case_when(delta_percent <= p25 ~ 1,
+                             delta_percent > p25 & delta_percent <= p50 ~ 2,
+                             delta_percent > p50 & delta_percent <= p75 ~ 3,
+                             delta_percent > p75 ~ 4)
+)
+```
+
+Below, we isolate only the columns of interest and export the indicator data to csv. 
+```{r}
+
+pillars <- qe %>% select(geo_id,geo_type,year,var,units,value,var_bucket,delta_percent,delta_quartile)
 
 write_csv(pillars,"finalData/indicators.csv")
+```
 
+```{r}
 bg_data2 <- left_join(bg_data,v,by="var")
 
 alt_data$geo_type <- "alternate"
@@ -639,7 +697,7 @@ bg_data2$geo_type <- "block_group"
 bg_data2$geo_id <- bg_data2$GEOID
 bg_data2 <- select(bg_data2,geo_id,geo_type,var,value_units)
 
-overall$geo_id <- "NJ0714001"
+overall$geo_id <- name
 overall$geo_type <- "service_area"
 overall$value <- as.numeric(overall$value)
 overall2 <- left_join(overall,v,by="var")
@@ -649,16 +707,19 @@ census <- bind_rows(bg_data2,alt_data,overall2)
 census$year <- 2019
 census <- select(census,geo_id,geo_type,year,var,value,units)
 
-x = bg_data2 %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
-y = pillars %>% mutate(value=runif(n=16520)) %>% filter(geo_type=="block_group" & year == 2019)  %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+write_csv(census,"finalData/census.csv")
+
+x = census %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+
+y = pillars %>% mutate(value=runif(n=length(pillars$geo_type))) %>% filter(geo_type=="block_group" & year == 2020)  %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
+
 c <- cor(x=x,y=y)
 c <- as.data.frame(c)
 c$census_var <- rownames(c)
-c <- pivot_longer(c,cols=pillar1_affordability_score:pillar3_water_board ,names_to = "variable", values_to="corr")
+c <- pivot_longer(c,cols=pillar1_affordability:pillar3_water_board ,names_to = "variable", values_to="corr")
 
 write_csv(c,"finalData/correlations.csv")
 
-write_csv(census,"finalData/census.csv")
 ```
 
 
@@ -685,11 +746,11 @@ bg <- left_join(bg,pcaData.bg,by="GEOID")
 tr <- left_join(tr,pcaData.tr,by="GEOID")
 tr$PC1_allVars <- -tr$PC1_allVars
 
-m.pc.bg <- mapview(bg,zcol="PC1_allVars", layer.name="Block Groups \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
-m.pov.bg <- mapview(bg,zcol="income_median", layer.name="Block Groups \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
+m.pc.bg <- mapview(bg,zcol="PC1_allVars", layer.name="Block Groups \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA.", lwd=2)
+m.pov.bg <- mapview(bg,zcol="income_median", layer.name="Block Groups \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
 
-m.pc.tr <- mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
-m.pov.tr <- mapview(tr,zcol="income_median", layer.name="Tracts \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
+m.pc.tr <- mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
+m.pov.tr <- mapview(tr,zcol="income_median", layer.name="Tracts \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
 
 mapl <- sync(m.pc.bg, m.pov.bg, m.pc.tr, m.pov.tr)
 mapl
@@ -738,7 +799,7 @@ sync(map.pc, map.tr)
 
 There are many sophisticated methods from the "machine learning" toolbox (e.g. stepwise regression algorithms, ridge regressions, LASSO, random forest models, ) that could serve to identify particular models based on sociodemographic/economic variables that most effectively predict values of equity/performance variables. However, it may be more straightforward to justify and communicate highlighting which sociodemographic variables are most linearly correlated with a variable of interest.
 
-Let's simulate come equity indicators that are various functions of the socioeconomic variables:
+Let's simulate some equity indicators that are various functions of the socioeconomic variables:
 
 ```{r y_simuolate}
 x <- tr[6:31] %>% 
@@ -771,7 +832,7 @@ corrplot(c,
 ```
 Saving our data at the tract and block group level
 ```{r save}
-sf::write_sf(bg,"data/census_blockgroup_newark.geojson")
-sf::write_sf(tr,"data/census_tract_newark.geojson")
-sf::write_sf(newark,"data/service_area_newark.geojson")
+sf::write_sf(bg,"finalData/census_blockgroup_buffalo_withdata.geojson")
+sf::write_sf(tr,"finalData/census_tract_buffalo_withdata.geojson")
+sf::write_sf(buffalo,"finalData/service_area_buffalo_withdata.geojson")
 ```
