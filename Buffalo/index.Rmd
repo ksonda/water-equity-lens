@@ -29,9 +29,6 @@ library(missForest)
 census_api_key("b25f8b1b7bf10561c9cbc3a20a4d2572677f1f05")
 options(tigris_use_cache = TRUE)
 
-#set proijection for area, in this case NY state plane NAD83
-prj <- 2830
-
 ```
 
 ## Introduction
@@ -79,7 +76,7 @@ Cancer Prevention Institute of California, Fremont, California. 2014](https://ca
 
 ## The workflow
 
-First, we take an example service area boundary. In this case the Newark Water Department.This comes from an external API but could be read from an arbitrary local or web location.
+First, we take an example service area boundary. In this case the Buffalo municipal boundary. This could come from an external API but in this case comes from a local file. We re-project to WGS84 just to be standard to begin with.
 
 ```{r, results="asis"}
 #pws <- read_sf("C:/Users/kyleo/Downloads/pws.gpkg")
@@ -91,7 +88,7 @@ state <- "NY"
 name <- "Buffalo"
 ```
 
-Then we find the relevant Census Block Groups (orange) or Tracts (green), first downloading the entire state and then subsetting to the utility service area (blue).
+Then we find the relevant Census Block Groups (orange) or Tracts (green), first downloading the entire state and then subsetting to the utility service area (blue). We
 
 ```{r census_boundaries}
 bg <- get_acs(state = state, geography = "block group", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
@@ -411,6 +408,7 @@ In this case, Buffalo's alternative polygons seem to mostly be combinations of C
 
 First, we compute the area of the block groups (projecting to the appropriate state plane projection)
 ```{r weight}
+prj <- 2830
 
 bg <- bg %>% 
   st_transform(prj) %>% # project to NAD83/New York West Projection
@@ -429,6 +427,7 @@ alt <- alt %>%
 Now we compute the spatial intersection of the alternate geometry with the block groups
 
 ```{r intersect}
+alt_name = "district" #here we set the name of the alternate geometry
 alt.bg <- sf::st_intersection(alt,bg)
 
 alt.bg <- alt.bg %>% 
@@ -492,14 +491,13 @@ alt_polygons <- na.omit(alt_polygons)
 alt_data <- st_drop_geometry(alt_polygons)
 alt_data <- left_join(alt_data,v,by="var")
 alt_data$value <- as.numeric(alt_data$value)
-alt_polygons <- distinct(select(alt_polygons,alt_polygon_id),.keep_all = TRUE)
+alt_polygons <- distinct(select(alt_polygons,alt_polygon_id))
 alt_polygons <- st_transform(alt_polygons,4326)
 
 bg_data <- pivot_longer(imp.bg,!GEOID,names_to = "var",values_to = "value")
 bg_data <- left_join(bg_data,v,by="var")
 bg_polygons <- select(bg,GEOID)
 boundary.p <- st_transform(boundary,prj) #change based on state plane
-boundary.p$id <- boundary.p$Name # set id
 bg_polygons <- st_intersection(bg_polygons,boundary.p)
 bg_polygons <- select(bg_polygons,GEOID)
 bg_polygons <- st_transform(bg_polygons,4326)
@@ -565,30 +563,26 @@ colnames(n)[1]<-"geo_id"
 write_sf(n,"finaldata/service_area.geojson")
 ```
 
-#### Add other variables
+#### Simulate Indicator Variables
 
-Let's create a vector of all the other variables that might be there:
+First, we create a vector of the indicator variables that are in the [data dictionary](data/WEL data dictionary_r2.xlsx), and then create an empty data frame encompassing all polygons and these variables, iterated over years of choice.dsfsdfdsfdsf
 
 ```{r}
 year <- c(2010,2020)
 var <- c("pillar1_hbi",
          "pillar1_ppi",
-         "pillar1_affordability_score",
+         "pillar1_affordability",
          "pillar1_cutoff",
          "pillar1_cap",
          "pillar1_connections_water",
          "pillar1_connections_sewer",
          "pillar2_workforce",
          "pillar2_diversity_1",
-         "pillar2_diversity_2",
          "pillar2_procurement",
          "pillar2_training",
          "pillar2_park_distance",
-         "pillar2_park_density",
          "pillar2_park_walk_access",
-         "pillar2_waterfront_access",
-         "pillar2_public_facing",
-         "pillar3_uri",
+         "pillar2_waterfront_acess",
          "pillar3_breaks",
          "pillar3_sewer_failures",
          "pillar3_lead_lines",
@@ -601,7 +595,7 @@ var <- c("pillar1_hbi",
          "pillar3_complaints"
          )
 
-geo_type <- c("block_group","alternate","service_area")
+geo_type <- c("block_group",alt_name,"service_area")
 
 geo_id <- unique(bg_data$GEOID)
 geo_id <- as.data.frame(c(geo_id,unique(alt_data$alt_polygon_id)))
@@ -621,7 +615,7 @@ l_bg <- l_bg*l_vars*l_year
 l_alt <- l_alt*l_vars*l_year
 
 pillars$geo_type <- "block_group"
-pillars$geo_type[(l_bg+1):(l_bg+l_alt)] <- "alternate"
+pillars$geo_type[(l_bg+1):(l_bg+l_alt)] <- alt_name
 pillars$geo_type[(l_bg+l_alt+1):length(pillars$geo_type)] <- "service_area"
 
 pillars$units <- "%"
@@ -635,19 +629,37 @@ pillars$units[which(pillars$var %in% c("pillar1_hbi",
 pillars <- pillars %>% group_by(var,year,geo_id) %>% mutate(value=runif(1))
 pillars$value[which(pillars$units=="%")] <- 100*pillars$value[which(pillars$units=="%")]
 
+```
+
+Below, we calculate the percent change year-over-year in the indicators for each polygon, where applicable
+
+```{r}
+
 pillars <- pillars %>% 
   arrange(geo_id,var,year) %>% 
-  group_by(geo_id,var) %>% mutate(delta_percent = 100*(value - lag(value))/lag(value)) %>% ungroup()
+  group_by(geo_id,var) %>% 
+  mutate(delta_percent = 100*(value - lag(value))/lag(value)) %>% 
+  ungroup()
 
 pillars <- select(pillars,geo_id,geo_type,year,var,value,units,delta_percent)
 
-pillars$units[which(pillars$var=="pillar1_affordability_score")] <- "character"
-pillars$value[which(pillars$var=="pillar1_affordability_score")] <- sample(c("Low","Medium","High"),length(pillars$var[which(pillars$var=="pillar1_affordability_score")]),replace=TRUE)
-pillars$delta_percent[which(pillars$units=="character")]<-NA
+pillars$units[which(pillars$var=="pillar1_affordability")] <- "character"
+pillars$value[which(pillars$var=="pillar1_affordability")] <- sample(c("Low","Medium","High"),length(pillars$var[which(pillars$var=="pillar1_affordability")]),replace=TRUE)
+pillars$delta_percent[which(pillars$units=="character")]<-NA 
+
+```
+
+Here, we 
+
+```{r}
 
 # This will need to be its own code block customized for each variable
 pillars$var_bucket <- sample(c("High","Medium","Low"),length(pillars$geo_id),replace=TRUE)
+```
 
+Below, we calculate an indicator variable for which quartile a given polygon's percent change (delta_percent) is. 
+
+```{r}
 #wewaf
 qe <- pillars %>% 
   group_by(geo_type,var,year) %>%
@@ -664,91 +676,17 @@ qe <- qe %>% mutate(
                              delta_percent > p50 & delta_percent <= p75 ~ 3,
                              delta_percent > p75 ~ 4)
 )
+```
+
+Below, we isolate only the columns of interest and export the indicator data to csv. 
+```{r}
 
 pillars <- qe %>% select(geo_id,geo_type,year,var,units,value,var_bucket,delta_percent,delta_quartile)
 
-ascending_vars <- c("pillar1_affordability_score", #ordering so higher is bad
-                    "pillar1_cutoff",
-                    "pillar1_hbi",
-                    "pillar1_ppi",
-                    "pillar3_breaks",
-                    "pillar3_complaints",
-                    "pillar3_flooding",
-                    "pillar3_lead_lines",
-                    "pillar3_sewer_failures"
-                    )
-
-descending_vars <- c( #ordering so higher is good
-                     "pillar1_cap", 
-                     "pillar1_connections_sewer",
-                     "pillar1_connections_water",
-                     "pillar2_diversity_1",
-                     "pillar2_diversity_2",
-                     "pillar2_park_density",
-                     "pillar2_park_distance",
-                     "pillar2_park_walk_access",
-                     "pillar2_procurement",
-                     "pillar2_public_facing",
-                     "pillar2_training",
-                     "pillar2_waterfront_access",
-                     "pillar2_workforce",
-                     "pillar3_lead_line_replacement",
-                     "pillar3_meetings",
-                     "pillar3_outreach",
-                     "pillar3_proactive_maintenance",
-                     "pillar3_uri",
-                     "pillar3_water_board"
-                     )
-
-pillars <- pillars %>% mutate(var_rank_order = case_when(
-  var %in% ascending_vars ~ "ascending",
-  var %in% descending_vars ~ "descending")) 
-
-pillars$value_character <- pillars$value
-pillars$value_character[which(pillars$units != "character")] <- NA
-
-pillars$value[which(pillars$var == "pillar1_affordability_score" & pillars$value == "High")] <- "3"
-pillars$value[which(pillars$var == "pillar1_affordability_score" & pillars$value == "Medium")] <- "2"
-pillars$value[which(pillars$var == "pillar1_affordability_score" & pillars$value == "Low")] <- "1"
-
-pillars$value <- as.numeric(pillars$value)
-
-
-pillars_asc <- pillars %>% 
-  filter(var_rank_order == "ascending") %>%
-  group_by(year,geo_type,var) %>%
-  add_tally() %>%
-  arrange(.,value,value_character, .by_group=TRUE) %>% 
-  mutate(var_rank = order(value, value_character))
-
-pillars_desc <- pillars %>% 
-  filter(var_rank_order == "descending") %>%
-  group_by(year,geo_type,var) %>%
-  add_tally() %>%
-  arrange(.,value,value_character, .by_group=TRUE) %>% 
-  mutate(var_rank = order(value, value_character, decreasing = TRUE))
-
-pillars <- bind_rows(pillars_asc,pillars_desc)
-pillars <- select(pillars,
-                  geo_id,
-                  geo_type,
-                  year,
-                  var,
-                  units,
-                  var_rank_order,
-                  value,
-                  value_character,
-                  n,
-                  var_rank,
-                  var_bucket,
-                  delta_percent,
-                  delta_quartile
-                  )
-
-pillars <- pillars %>% ungroup() %>% arrange(geo_type,var,var_rank,year)
-  
 write_csv(pillars,"finalData/indicators.csv")
+```
 
+```{r}
 bg_data2 <- left_join(bg_data,v,by="var")
 
 alt_data$geo_type <- "alternate"
@@ -769,6 +707,8 @@ census <- bind_rows(bg_data2,alt_data,overall2)
 census$year <- 2019
 census <- select(census,geo_id,geo_type,year,var,value,units)
 
+write_csv(census,"finalData/census.csv")
+
 x = census %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
 
 y = pillars %>% mutate(value=runif(n=length(pillars$geo_type))) %>% filter(geo_type=="block_group" & year == 2020)  %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
@@ -776,11 +716,10 @@ y = pillars %>% mutate(value=runif(n=length(pillars$geo_type))) %>% filter(geo_t
 c <- cor(x=x,y=y)
 c <- as.data.frame(c)
 c$census_var <- rownames(c)
-c <- pivot_longer(c,cols=pillar1_affordability_score:pillar3_water_board ,names_to = "variable", values_to="corr")
+c <- pivot_longer(c,cols=pillar1_affordability:pillar3_water_board ,names_to = "variable", values_to="corr")
 
 write_csv(c,"finalData/correlations.csv")
 
-write_csv(census,"finalData/census.csv")
 ```
 
 
@@ -807,11 +746,11 @@ bg <- left_join(bg,pcaData.bg,by="GEOID")
 tr <- left_join(tr,pcaData.tr,by="GEOID")
 tr$PC1_allVars <- -tr$PC1_allVars
 
-m.pc.bg <- mapview(bg,zcol="PC1_allVars", layer.name="Block Groups \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
-m.pov.bg <- mapview(bg,zcol="income_median", layer.name="Block Groups \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
+m.pc.bg <- mapview(bg,zcol="PC1_allVars", layer.name="Block Groups \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA.", lwd=2)
+m.pov.bg <- mapview(bg,zcol="income_median", layer.name="Block Groups \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
 
-m.pc.tr <- mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
-m.pov.tr <- mapview(tr,zcol="income_median", layer.name="Tracts \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="Newark Water Dept.", lwd=2)
+m.pc.tr <- mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
+m.pov.tr <- mapview(tr,zcol="income_median", layer.name="Tracts \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
 
 mapl <- sync(m.pc.bg, m.pov.bg, m.pc.tr, m.pov.tr)
 mapl
@@ -860,7 +799,7 @@ sync(map.pc, map.tr)
 
 There are many sophisticated methods from the "machine learning" toolbox (e.g. stepwise regression algorithms, ridge regressions, LASSO, random forest models, ) that could serve to identify particular models based on sociodemographic/economic variables that most effectively predict values of equity/performance variables. However, it may be more straightforward to justify and communicate highlighting which sociodemographic variables are most linearly correlated with a variable of interest.
 
-Let's simulate come equity indicators that are various functions of the socioeconomic variables:
+Let's simulate some equity indicators that are various functions of the socioeconomic variables:
 
 ```{r y_simuolate}
 x <- tr[6:31] %>% 
@@ -893,7 +832,7 @@ corrplot(c,
 ```
 Saving our data at the tract and block group level
 ```{r save}
-sf::write_sf(bg,"data/census_blockgroup_newark.geojson")
-sf::write_sf(tr,"data/census_tract_newark.geojson")
-sf::write_sf(newark,"data/service_area_newark.geojson")
+sf::write_sf(bg,"finalData/census_blockgroup_buffalo_withdata.geojson")
+sf::write_sf(tr,"finalData/census_tract_buffalo_withdata.geojson")
+sf::write_sf(buffalo,"finalData/service_area_buffalo_withdata.geojson")
 ```
