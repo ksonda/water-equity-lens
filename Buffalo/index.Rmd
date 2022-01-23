@@ -26,6 +26,7 @@ library(leafsync)
 library(corrplot)
 library(zoo)
 library(missForest)
+library(fuzzyjoin)
 census_api_key("b25f8b1b7bf10561c9cbc3a20a4d2572677f1f05")
 options(tigris_use_cache = TRUE)
 
@@ -88,7 +89,7 @@ First, we take an example service area boundary. In this case the Buffalo munici
 ```{r, results="asis"}
 #pws <- read_sf("C:/Users/kyleo/Downloads/pws.gpkg")
 #newark <- filter(pws,PWSID=="NJ0714001")
-boundary <- sf::read_sf("data/geospatial_data/COB_municipal_boundary.shp") %>% st_transform(4326)
+boundary <- sf::read_sf("data/geospatial_data/COB_municipal_boundary.shp") %>% st_transform(prj)
 mapview(boundary)
 
 ```
@@ -96,8 +97,8 @@ mapview(boundary)
 Then we find the relevant Census Block Groups (orange) or Tracts (green), first downloading the entire state and then subsetting to the utility service area (blue). We
 
 ```{r census_boundaries}
-bg <- get_acs(state = state, geography = "block group", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
-tr <- get_acs(state = state, geography = "tract", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(4326)
+bg <- get_acs(state = state, geography = "block group", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(prj)
+tr <- get_acs(state = state, geography = "tract", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(prj)
 
 bg1 <- st_intersects(bg,boundary) %>% as.integer()
 bg <- bg[which(bg1==1),]
@@ -211,7 +212,7 @@ counties <- tidycensus::get_acs(year=2019,
                                 geography = "county",
                                 variables = "B01001_001",
                                 geometry = TRUE)  %>% 
-  sf::st_transform(4326) %>%
+  sf::st_transform(prj) %>%
   dplyr::filter(lengths(sf::st_intersects(., boundary)) > 0)
 
 # Find FIPS code for relevant state and counties, make sure no duplicates
@@ -401,7 +402,7 @@ sync(map.miss,map.imp)
 With all missing data imputed, we can now demonstrate how U.S. Census data can be re-estimated for arbitrary larger geographies. Below, take the example of the City of Newark's [Neighborhood](https://data.ci.newark.nj.us/dataset/neighborhoods2013) boundaries, compared with Census Block Groups.
 
 ```{r otherbounds, results="asis"}
-alt <- sf::read_sf("data/geospatial_data/COB_council_distrcits.shp") %>% st_transform(4326)
+alt <- sf::read_sf("data/geospatial_data/COB_council_distrcits.shp") %>% st_transform(prj)
 
  mapview(bg, layer.name= "Census Block Groups") + mapview(alt, alpha.regions=0, col.regions="darkslategrey", lwd=3, color="darkslategrey", layer.name="Alt. Polygons (Neighborhoods)") + mapview(boundary, alpha.regions=0, lwd=2, color="black", col.regions="black",layer.name = name)
 
@@ -431,7 +432,6 @@ alt <- alt %>%
 Now we compute the spatial intersection of the alternate geometry with the block groups
 
 ```{r intersect}
-alt_name = "district" #here we set the name of the alternate geometry
 alt.bg <- sf::st_intersection(alt,bg)
 
 alt.bg <- alt.bg %>% 
@@ -456,19 +456,18 @@ Now we can weight every variable by hh and pop weights as appropriate to come up
 imp.bg.long <- pivot_longer(imp.bg,!GEOID,names_to = "var",values_to = "value")
 imp.bg.long <- left_join(imp.bg.long,alt.bg,by="GEOID")
 imp.bg.long$value <- imp.bg.long$value * imp.bg.long$wgt_hh
-imp.bg.long <- select(imp.bg.long,District,var,value)
+imp.bg.long <- select(imp.bg.long,!!sym(alt_name),var,value)
 imp.neigh.long <- imp.bg.long %>% 
-  group_by(District,var) %>%  #change depending on alt polygon name
+  group_by(!!sym(alt_name),var) %>%  #change depending on alt polygon name
   summarise(value=sum(value))
 
 
 alt_polygons <- alt %>% 
-  left_join(imp.neigh.long,by="District") %>% #change depending on alt polygon name
-  select(District,var,value)#change depending on alt polygon name
-
-alt_polygons$alt_polygon_id <- alt_polygons$District #change depending on alt polygon name
-alt_polygons <- select(alt_polygons,alt_polygon_id,var,value) 
-
+  left_join(imp.neigh.long,by=as.character(sym(alt_name))) %>% 
+  select(!!sym(alt_name),var,value) %>%
+  mutate(alt_polygon_id = !!sym(alt_name)) %>%
+  select(alt_polygon_id,var,value) 
+ 
 v <- as.data.frame(unique(alt_polygons$var))
 v$units = c("USD",
             "USD",
@@ -511,7 +510,6 @@ bg_data$var <- paste0("census_",bg_data$var)
 alt_data$var <- paste0("census_",alt_data$var)
 
 ```
-We do something similar with the block groups as bounded by the service area boundary now. 
 
 
 
@@ -547,8 +545,8 @@ alt_data <- left_join(alt_data,v,by="var")
 
 colnames(alt_polygons)[1]<-"geo_id"
 colnames(bg_polygons)[1]<-"geo_id"
-write_sf(alt_polygons,"finalData/alternate.geojson")
-write_sf(bg_polygons,"finaldata/block_group.geojson")
+write_sf(alt_polygons,"finalData/alternate.geojson",delete_dsn=TRUE)
+write_sf(bg_polygons,"finaldata/block_group.geojson",delete_dsn=TRUE)
 
 
 overall <- left_join(bg_data,select(bg,GEOID,B01001_001E),by="GEOID")
@@ -564,7 +562,7 @@ overall <- overall %>% st_drop_geometry() %>% group_by(var) %>% summarise(value=
 
 n <- boundary %>% select(OBJECTID)
 colnames(n)[1]<-"geo_id"
-write_sf(n,"finaldata/service_area.geojson")
+write_sf(n,"finaldata/service_area.geojson",delete_dsn=TRUE)
 ```
 
 #### Simulate Indicator Variables
@@ -653,12 +651,26 @@ pillars$delta_percent[which(pillars$units=="character")]<-NA
 
 ```
 
-Here, we 
+Here, we demonstrate how a "bucket" can be specified a priori for each variable, and then used to calculate the appropriate bucket in the data. Here we use the `fuzzyjoin` R package, but the equivalent logic is in this SQL query 
+```{r, eval=FALSE}
+'SELECT vars, value, bucket_names 
+      FROM pillars 
+      LEFT JOIN buckets ON value BETWEEN lower_bound and upper_bound'
+
+```
 
 ```{r}
+buckets <- read_csv("data/buckets.csv") %>% select(vars,bucket_names,lower_bound,upper_bound)
+pillars$val_numeric <- as.numeric(pillars$value)
 
-# This will need to be its own code block customized for each variable
-pillars$var_bucket <- sample(c("High","Medium","Low"),length(pillars$geo_id),replace=TRUE)
+library(fuzzyjoin)
+# Attempt #3: use the fuzzyjoin package
+pillars<-fuzzy_left_join(pillars, buckets, 
+                by=c("val_numeric"="lower_bound", "val_numeric"="upper_bound"),
+                match_fun=list(`>=`, `<=`)) %>% 
+  select(geo_id:units,bucket_names,delta_percent) %>%
+  distinct(.keep_all=TRUE)
+
 ```
 
 Below, we calculate an indicator variable for which quartile a given polygon's percent change (delta_percent) is. 
