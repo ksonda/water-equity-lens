@@ -422,7 +422,7 @@ bg <- bg %>%
 
 Then we compute the area of the alternative polygons (projecting to the appropriate state plane projection)
 
-```{r weight}
+```{r weight2}
 alt <- alt %>% 
   st_transform(prj) %>% # project to NAD83/New York West Projection
   mutate(area_alt = st_area(.))# compute area
@@ -521,7 +521,7 @@ alt_data$var <- paste0("census_",alt_data$var)
 
 With this knowledge, we conduct the PCA, first on all the available variables for Block Groups and for Tracts. Below, we report on the first three principal components of the PCA for the tracts and block groups.
 
-```{r transform, warning=FALSE, message=FALSE}
+```{r transform2o, warning=FALSE, message=FALSE}
 # is.nan.data.frame <- function(x)
 # do.call(cbind, lapply(x, is.nan))
 # 
@@ -784,114 +784,116 @@ write_csv(c,"finalData/correlations.csv")
 
 ## Results 
 
-For tracts, we see that the first component alone explains 42% of the variance in the specified variables. Higher values on this component are associated with lower income measures, higher poverty, public assistance and unemployment, lower rents and housing values, more blue collar employment, higher proportions of minority groups, lower homeownership rates, less vehicle ownership, and higher prevalence of single-parent families, without being particularly informed by linguistic isolation, education levels, or housing crowdedness.
+For Districts, we see that the first component alone explains 45% of the variance in the specified variables. Higher values on this component are associated with lower income measures, higher poverty, public assistance and unemployment, lower rents and housing values, more blue collar employment, higher proportions of minority groups, lower homeownership rates, less vehicle ownership, and higher prevalence of single-parent families, without being particularly informed by linguistic isolation, education levels, or housing crowdedness.
 
 ```{r, results="asis"}
-kable(summary(pca.tr)$importance[1:3,1:3],digits=2)
-kable(pca.tr$rotation,digits=2)
+kable(summary(pca.alt)$importance[1:3,1:3],digits=2)
+kable(pca.alt$rotation,digits=2)
 ```
 
-For block groups, we see that the first component alone explains only 29% of the variance in the specified variables (compared to 42% in the tract-level analysis). However, the way the variables contribute to the first component is similar to how they do in the tract-level analysis.
+For block groups, we see that the first component alone explains only 38% of the variance in the specified variables (compared to 45% in the District-level analysis). However, the way the variables contribute to the first component is similar to how they do in the tract-level analysis.
 
 ```{r, results="asis"}
 kable(summary(pca.bg)$importance[1:3,1:3],digits=2)
 kable(pca.bg$rotation,digits=2)
 ```
 
-Below, we visualize how the first component (PC1) can be used as a multidimensional socioeconomic status/ deprivation index, that incorporates more information and yields different results than just using income or poverty levels or minority group prevalence. Tracts have less missing data than block groups, generally due to U.S. Census Bureau privacy controls that restrict reporting of certain cross-tabulations in small areas. Thus, the smaller the area, the fewer variables are suitable for use in constructing socioeconomic indexes.
+Below, we visualize how the first component (PC1) can be used as a multidimensional socioeconomic status/ deprivation index, that incorporates more information and yields different results than just using income or poverty levels or minority group prevalence. 
 
 ```{r, results="asis"}
-bg <- left_join(bg,pcaData.bg,by="GEOID")
-tr <- left_join(tr,pcaData.tr,by="GEOID")
-tr$PC1_allVars <- -tr$PC1_allVars
+bgm <- left_join(bg,bg_data_wide,by="GEOID")
+# tr <- left_join(tr,pcaData.tr,by="GEOID")
+# tr$PC1_allVars <- -tr$PC1_allVars
 
-m.pc.bg <- mapview(bg,zcol="PC1_allVars", layer.name="Block Groups \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA.", lwd=2)
-m.pov.bg <- mapview(bg,zcol="income_median", layer.name="Block Groups \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
-
-m.pc.tr <- mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
-m.pov.tr <- mapview(tr,zcol="income_median", layer.name="Tracts \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
-
-mapl <- sync(m.pc.bg, m.pov.bg, m.pc.tr, m.pov.tr)
+m.pc.bg <- mapview(bgm,zcol="PC1", layer.name="Block Groups \n PC1") + mapview(boundary,alpha.regions=0,col.regions="red",color="red",layer.name="BSA.", lwd=2)
+m.pov.bg <- mapview(bgm,zcol="census_income_median", layer.name="Block Groups \n Median HH Income") + mapview(boundary,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
+# 
+# m.pc.tr <- mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n PC1") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
+# m.pov.tr <- mapview(tr,zcol="income_median", layer.name="Tracts \n Median HH Income") + mapview(newark,alpha.regions=0,col.regions="red",color="red",layer.name="BSA", lwd=2)
+# 
+ mapl <- sync(m.pc.bg, m.pov.bg)
 mapl
-```
 
-## Using indexes and correlation indexes to create insights.
-
-### Scaling variables by indexes.
-
-Below we demonstrate how using an index can be used to highlight neighborhoods that users may be more interested in from an equity framework. For example, if the distribution of a problematic phenomenon such as taste complaints is randomly distributed, then from an equity perspective, one may wish to prioritize addressing these issues in the most socioeconomically burdened neighborhoods before less burdened neighborhoods.
-
-We simulate tract-level taste complaints per household as a normally distributed random variable with a mean of 0.2 and a standard deviation of 0.1 and a minimum of 0, with no assumed correlation with any equity-related variable:
-
-```{r taste, results="asis"}
-set.seed(2354367)
-tr$taste_complaints_perHH <- rnorm(n=130,mean=0.2, sd=0.1)
-tr$taste_complaints_perHH[which(tr$taste_complaints_perHH<0)] <- 0
-tr$PC1_allVars <- -tr$PC1_allVars
-
-map.tr <- mapview::mapview(tr,zcol="taste_complaints_perHH", layer.name="Tracts \n Taste Compl per HH.")
-
-map.pc <- mapview::mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n Burden Index")
-
-sync(map.pc, map.tr)
-
-
-ggplot2::ggplot(data=tr, aes(x=-PC1_allVars,y=taste_complaints_perHH)) + geom_point() + geom_abline() + xlab("Equity Principal Component (higher = more burdened)")
-```
-
-As we can see above, there is no correlation between our simulated taste complaint indicator and the socioeconomic status index (scale reversed, so that higher numbers correspond to a more "burdened" area).
-
-We can multiply the taste complaint indicator by the "burden" index to create a taste complaint scaled by burden that will highlight different areas to focus on than by focusing on the indicator alone:
-
-```{r scale demo, results="asis"}
-tr$taste_scaled <- tr$PC1_allVars* tr$taste_complaints_perHH
-
-map.tr <- mapview::mapview(tr,zcol="taste_complaints_perHH", layer.name="Tracts \n Taste Compl per HH.")
-
-map.pc <- mapview::mapview(tr,zcol="taste_scaled", layer.name="Taste complaints scaled by burden")
-
-sync(map.pc, map.tr)
 
 ```
 
-### Insights: most correlated variables
+<!-- ## Using indexes and correlation indexes to create insights. -->
 
-There are many sophisticated methods from the "machine learning" toolbox (e.g. stepwise regression algorithms, ridge regressions, LASSO, random forest models, ) that could serve to identify particular models based on sociodemographic/economic variables that most effectively predict values of equity/performance variables. However, it may be more straightforward to justify and communicate highlighting which sociodemographic variables are most linearly correlated with a variable of interest.
+<!-- ### Scaling variables by indexes. -->
 
-Let's simulate some equity indicators that are various functions of the socioeconomic variables:
+<!-- Below we demonstrate how using an index can be used to highlight neighborhoods that users may be more interested in from an equity framework. For example, if the distribution of a problematic phenomenon such as taste complaints is randomly distributed, then from an equity perspective, one may wish to prioritize addressing these issues in the most socioeconomically burdened neighborhoods before less burdened neighborhoods. -->
 
-```{r y_simuolate}
-x <- tr[6:31] %>% 
-  st_drop_geometry() %>% 
-  na.aggregate()
+<!-- We simulate tract-level taste complaints per household as a normally distributed random variable with a mean of 0.2 and a standard deviation of 0.1 and a minimum of 0, with no assumed correlation with any equity-related variable: -->
 
-pca <- pca.tr$x
+<!-- ```{r taste, results="asis"} -->
+<!-- set.seed(2354367) -->
+<!-- tr$taste_complaints_perHH <- rnorm(n=130,mean=0.2, sd=0.1) -->
+<!-- tr$taste_complaints_perHH[which(tr$taste_complaints_perHH<0)] <- 0 -->
+<!-- tr$PC1_allVars <- -tr$PC1_allVars -->
 
-y1 <- x$PC1 + rnorm(length(x$PC1),0,1)
-y2 <- 0.5*x$PC1 + 0.5*x$PC2 + rnorm(length(x$PC1),0,1)
-y3 <- 0.5*x$PC3 + 0.5*x$PC2 + rnorm(length(x$PC1),0,1)
-```
+<!-- map.tr <- mapview::mapview(tr,zcol="taste_complaints_perHH", layer.name="Tracts \n Taste Compl per HH.") -->
 
-Now we compute the correlation between each of these simulated indicators and all of the socioeconomic variables. Correlation is measured on a scale between -1 and 1, with values closer to 0 indicating less correlation. The table below shows how each of the three simulated equity indicators are correlated with each of the socioeconomic variables. For example, $y1$ is highly correlated with the percentage of the households below 200% of the Federal Poverty level, Single parent families, and households with no vehicle,  and strongly inversely correlated with income measures, home values, and home ownership rates. $y3$, on the other hand, is most highly correlated with lower levels of linguistic isolation and education levels below high school. This would enable a dynamic insight to be generated, where a user could select an equity indicator, and be shown any relevant descriptions or plots for any associated socioeconomic variables. 
+<!-- map.pc <- mapview::mapview(tr,zcol="PC1_allVars", layer.name="Tracts \n Burden Index") -->
 
-```{r corr, results="asis"}
-y <- as.data.frame(cbind(y1,y2,y3))
-x <- tr[6:24] %>% 
-  st_drop_geometry() %>% 
-  na.aggregate()
-c <- cor(x=x,y=y)
+<!-- sync(map.pc, map.tr) -->
 
-test <- cor.mtest(cbind(y,x))$p[1:3,4:22]
 
-corrplot(c,
-  method = "number",
-  type = "full",
-  order="original"# show only upper side
-)
-```
-Saving our data at the tract and block group level
-```{r save}
-sf::write_sf(bg,"finalData/census_blockgroup_buffalo_withdata.geojson")
-sf::write_sf(tr,"finalData/census_tract_buffalo_withdata.geojson")
-sf::write_sf(buffalo,"finalData/service_area_buffalo_withdata.geojson")
-```
+<!-- ggplot2::ggplot(data=tr, aes(x=-PC1_allVars,y=taste_complaints_perHH)) + geom_point() + geom_abline() + xlab("Equity Principal Component (higher = more burdened)") -->
+<!-- ``` -->
+
+<!-- As we can see above, there is no correlation between our simulated taste complaint indicator and the socioeconomic status index (scale reversed, so that higher numbers correspond to a more "burdened" area). -->
+
+<!-- We can multiply the taste complaint indicator by the "burden" index to create a taste complaint scaled by burden that will highlight different areas to focus on than by focusing on the indicator alone: -->
+
+<!-- ```{r scale demo, results="asis"} -->
+<!-- tr$taste_scaled <- tr$PC1_allVars* tr$taste_complaints_perHH -->
+
+<!-- map.tr <- mapview::mapview(tr,zcol="taste_complaints_perHH", layer.name="Tracts \n Taste Compl per HH.") -->
+
+<!-- map.pc <- mapview::mapview(tr,zcol="taste_scaled", layer.name="Taste complaints scaled by burden") -->
+
+<!-- sync(map.pc, map.tr) -->
+
+<!-- ``` -->
+
+<!-- ### Insights: most correlated variables -->
+
+<!-- There are many sophisticated methods from the "machine learning" toolbox (e.g. stepwise regression algorithms, ridge regressions, LASSO, random forest models, ) that could serve to identify particular models based on sociodemographic/economic variables that most effectively predict values of equity/performance variables. However, it may be more straightforward to justify and communicate highlighting which sociodemographic variables are most linearly correlated with a variable of interest. -->
+
+<!-- Let's simulate some equity indicators that are various functions of the socioeconomic variables: -->
+
+<!-- ```{r y_simuolate} -->
+<!-- x <- tr[6:31] %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   na.aggregate() -->
+
+<!-- pca <- pca.tr$x -->
+
+<!-- y1 <- x$PC1 + rnorm(length(x$PC1),0,1) -->
+<!-- y2 <- 0.5*x$PC1 + 0.5*x$PC2 + rnorm(length(x$PC1),0,1) -->
+<!-- y3 <- 0.5*x$PC3 + 0.5*x$PC2 + rnorm(length(x$PC1),0,1) -->
+<!-- ``` -->
+
+<!-- Now we compute the correlation between each of these simulated indicators and all of the socioeconomic variables. Correlation is measured on a scale between -1 and 1, with values closer to 0 indicating less correlation. The table below shows how each of the three simulated equity indicators are correlated with each of the socioeconomic variables. For example, $y1$ is highly correlated with the percentage of the households below 200% of the Federal Poverty level, Single parent families, and households with no vehicle,  and strongly inversely correlated with income measures, home values, and home ownership rates. $y3$, on the other hand, is most highly correlated with lower levels of linguistic isolation and education levels below high school. This would enable a dynamic insight to be generated, where a user could select an equity indicator, and be shown any relevant descriptions or plots for any associated socioeconomic variables.  -->
+
+<!-- ```{r corr, results="asis"} -->
+<!-- y <- as.data.frame(cbind(y1,y2,y3)) -->
+<!-- x <- tr[6:24] %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   na.aggregate() -->
+<!-- c <- cor(x=x,y=y) -->
+
+<!-- test <- cor.mtest(cbind(y,x))$p[1:3,4:22] -->
+
+<!-- corrplot(c, -->
+<!--   method = "number", -->
+<!--   type = "full", -->
+<!--   order="original"# show only upper side -->
+<!-- ) -->
+<!-- ``` -->
+<!-- Saving our data at the tract and block group level -->
+<!-- ```{r save} -->
+<!-- sf::write_sf(bg,"finalData/census_blockgroup_buffalo_withdata.geojson") -->
+<!-- sf::write_sf(tr,"finalData/census_tract_buffalo_withdata.geojson") -->
+<!-- sf::write_sf(buffalo,"finalData/service_area_buffalo_withdata.geojson") -->
+<!-- ``` -->
