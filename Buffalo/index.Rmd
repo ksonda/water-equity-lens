@@ -517,6 +517,7 @@ alt_data$var <- paste0("census_",alt_data$var)
 # skim(pcaData.tr)
 # skim(pcaData.bg)
 ```
+### PCA on census variables to create socioeconomic index
 
 With this knowledge, we conduct the PCA, first on all the available variables for Block Groups and for Tracts. Below, we report on the first three principal components of the PCA for the tracts and block groups.
 
@@ -552,7 +553,7 @@ write_sf(bg_polygons,"finaldata/block_group.geojson",delete_dsn=TRUE)
 overall <- left_join(bg_data,select(bg,GEOID,B01001_001E),by="GEOID")
 overall <- st_as_sf(overall)
 overall$area_bg <- st_area(overall)
-overall <- st_intersection(overall,select(boundary.p,id))
+overall <- st_intersection(overall,select(boundary.p,OBJECTID))
 overall$area_intersection <- st_area(overall)
 overall$area_share <- overall$area_intersection/overall$area_bg
 overall$wgt <- (overall$area_share * overall$B01001_001E) / sum(bg$B01001_001E)
@@ -565,9 +566,9 @@ colnames(n)[1]<-"geo_id"
 write_sf(n,"finaldata/service_area.geojson",delete_dsn=TRUE)
 ```
 
-#### Simulate Indicator Variables
+### Creating Indicator Data model.
 
-First, we create a vector of the indicator variables that are in the [data dictionary](data/WEL data dictionary_r2.xlsx), and then create an empty data frame encompassing all polygons and these variables, iterated over years of choice.dsfsdfdsfdsf
+First, we create a vector of the indicator variables that are in the [data dictionary](data/WEL data dictionary_r2.xlsx), and then create an empty data frame encompassing all polygons and these variables, iterated over years of choice. 
 
 ```{r}
 year <- c(2010,2020)
@@ -626,7 +627,10 @@ pillars$units[which(pillars$var %in% c("pillar1_hbi",
                                        "pillar2_public_facing",
                                        "pillar3_breaks",
                                        "pillar3_sewer_failures"))] <- "ratio"
+```
 
+Below, we populate the indicator data model with random uniform variables. This step should be replaced by an entire workflow that impots submitted data and calculates the variables
+```{r}
 
 pillars <- pillars %>% group_by(var,year,geo_id) %>% mutate(value=runif(1))
 pillars$value[which(pillars$units=="%")] <- 100*pillars$value[which(pillars$units=="%")]
@@ -669,6 +673,7 @@ pillars<-fuzzy_left_join(pillars, buckets,
                 by=c("val_numeric"="lower_bound", "val_numeric"="upper_bound"),
                 match_fun=list(`>=`, `<=`)) %>% 
   select(geo_id:units,bucket_names,delta_percent) %>%
+  rename(var_bucket=bucket_names)%>%
   distinct(.keep_all=TRUE)
 
 ```
@@ -676,7 +681,6 @@ pillars<-fuzzy_left_join(pillars, buckets,
 Below, we calculate an indicator variable for which quartile a given polygon's percent change (delta_percent) is. 
 
 ```{r}
-#wewaf
 qe <- pillars %>% 
   group_by(geo_type,var,year) %>%
   summarise(delta_quartile=quantile(delta_percent,
@@ -702,16 +706,18 @@ pillars <- qe %>% select(geo_id,geo_type,year,var,units,value,var_bucket,delta_p
 write_csv(pillars,"finalData/indicators.csv")
 ```
 
+Below, we add the block group and alternate polygon and overall aggregated census data into one long-form data frame 
+
 ```{r}
 bg_data2 <- left_join(bg_data,v,by="var")
 
-alt_data$geo_type <- "alternate"
+alt_data$geo_type <- alt_name
 alt_data$geo_id <- alt_data$alt_polygon_id
-alt_data <- select(alt_data,geo_id,geo_type,var,value_units)
+alt_data <- select(alt_data,geo_id,geo_type,var,value,units)
 
 bg_data2$geo_type <- "block_group"
 bg_data2$geo_id <- bg_data2$GEOID
-bg_data2 <- select(bg_data2,geo_id,geo_type,var,value_units)
+bg_data2 <- select(bg_data2,geo_id,geo_type,var,value,units)
 
 overall$geo_id <- name
 overall$geo_type <- "service_area"
@@ -722,8 +728,45 @@ overall2 <- select(overall2,geo_id,geo_type,var,value,units)
 census <- bind_rows(bg_data2,alt_data,overall2)
 census$year <- 2019
 census <- select(census,geo_id,geo_type,year,var,value,units)
+```
+
+Below, we add quartiles for each census variable.
+
+```{r}
+
+qc <-census %>% 
+  group_by(geo_type,var,year) %>%
+  summarise(var_quartile=quantile(value,
+                                    probs=c(0.25,0.5,0.75),na.rm=TRUE), 
+            q=c("p25","p50","p75")) %>%
+  pivot_wider(names_from=q, values_from=var_quartile)
+
+qc <- left_join(census,qc,by=c("geo_type","var","year"))
+qc$var_quartile = NA
+qc <- qc %>% mutate(
+  var_quartile = case_when(value <= p25 ~ 1,
+                             value > p25 & value <= p50 ~ 2,
+                             value > p50 & value <= p75 ~ 3,
+                             value > p75 ~ 4)
+)
+
+```
+Below, we isolate only the columns of interest and export the indicator data to csv. 
+```{r}
+
+census <- qc %>% select(geo_id,geo_type,year,var,units,value,var_quartile)
 
 write_csv(census,"finalData/census.csv")
+```
+
+
+### Insights: most correlated variables
+
+There are many sophisticated methods from the "machine learning" toolbox (e.g. stepwise regression algorithms, ridge regressions, LASSO, random forest models, ) that could serve to identify particular models based on sociodemographic/economic variables that most effectively predict values of equity/performance variables. However, it may be more straightforward to justify and communicate highlighting which sociodemographic variables are most linearly correlated with a variable of interest.
+
+
+
+```{r}
 
 x = census %>% filter(geo_type=="block_group" & year==2019) %>% pivot_wider(id_cols=geo_id,names_from = var, values_from = value) %>% arrange(geo_id) %>% select(-geo_id)
 
