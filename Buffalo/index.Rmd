@@ -34,7 +34,7 @@ options(tigris_use_cache = TRUE)
 
 state <- "NY" #state in which utility is
 name <- "Buffalo" #name of service area
-prj <- 2830 #relevant projection
+prj <- 4326 #relevant projection
 alt_name <- "District" #name of alternative polygon
 
 ```
@@ -89,16 +89,18 @@ First, we take an example service area boundary. In this case the Buffalo munici
 ```{r, results="asis"}
 #pws <- read_sf("C:/Users/kyleo/Downloads/pws.gpkg")
 #newark <- filter(pws,PWSID=="NJ0714001")
-boundary <- sf::read_sf("data/geospatial_data/COB_municipal_boundary.shp") %>% st_transform(prj)
+boundary <- sf::read_sf("data/geospatial_data/COB_municipal_boundary.shp") %>% 
+  st_transform(prj)
 mapview(boundary)
 
 ```
 
-Then we find the relevant Census Block Groups (orange) or Tracts (green), first downloading the entire state and then subsetting to the utility service area (blue). We
+Then we find the relevant Census Block Groups (orange) or Tracts (green) or ZCTA, first downloading the entire state and then subsetting to the utility service area (blue). We
 
 ```{r census_boundaries}
 bg <- get_acs(state = state, geography = "block group", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(prj)
 tr <- get_acs(state = state, geography = "tract", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(prj)
+zip <- get_acs(state = state, geography = "zcta", variables = c("B01001_001","B11016_001"), geometry = TRUE, output="wide") %>% st_transform(prj)
 
 bg1 <- st_intersects(bg,boundary) %>% as.integer()
 bg <- bg[which(bg1==1),]
@@ -106,9 +108,12 @@ bg <- bg[which(bg1==1),]
 tr1 <- st_intersects(tr,boundary) %>% as.integer()
 tr <- tr[which(tr1==1),]
 
+zip1 <- st_intersects(zip,boundary) %>% as.integer()
+zip <- zip[which(zip1==1),]
+
 mapview(boundary, layer.name=name, map.types= "OpenStreetMap") +
   mapview(bg, alpha.regions=0, color="orange", col.regions="orange",lwd=2, layer.name="Block Groups", map.types= "OpenStreetMap") +
-  mapview(tr, alpha.regions=0, color="green",col.regions="green", lwd=3, layer.name="Tracts", map.types= "OpenStreetMap") 
+  mapview(zip, alpha.regions=0, color="green",col.regions="green", lwd=3, layer.name="ZCTA", map.types= "OpenStreetMap") 
 
 ```
 
@@ -237,9 +242,16 @@ data.tr <- get_acs(year=2019,
                               output="wide") %>%
   filter(GEOID %in% bg$GEOID)
 
+  data.zip <- get_acs(year=2019,
+                              geography = "zcta",
+                              variables = cv,
+                              geometry = TRUE,
+                              state = st,
+                              output="wide") %>%
+  filter(GEOID %in% zip$GEOID)
 ```
 
-Now we construct the variables for our PCA at the Tract and Block Group level.
+Now we construct the variables for our PCA at the Tract and Block Group and Zip code level.
 
 ```{r variableConstruct}
 pcaData.bg <- data.bg %>% 
@@ -355,6 +367,65 @@ pcaData.tr <- data.tr %>%
   st_drop_geometry()
 
 
+
+pcaData.zip <- data.zip %>% 
+  mutate(percBelow200FPL = 100*(1-poverty_level_gr_200FPLE/poverty_level_totalE),
+         percEducLessHS = 100*(1-(pop_educ_HSdiplomaE +
+                        pop_educ_GEDE +
+                        pop_educ_college_less_1yearE +
+                        pop_educ_college_more_1year_nodegreeE + 
+                        pop_educ_assocE +
+                        pop_educ_masterE +
+                        pop_educ_profE +
+                        pop_educ_docE)/pop_educ_attainment_countE),
+         percMinority = 100*(1-pop_nonhispanic_white_aloneE/pop_race_countE),
+         income_median = hh_income_medianE,
+         income_20tile = hh_income_20ptileE,
+         income_percapita = per_capita_incomeE,
+         percAssistance = 100*pop_in_hh_with_income_assistanceE /pop_hh_income_assistance_totalE,
+         rentMedian = rent_medianE,
+         rentIncomeRatioMedian = median_gross_rent_percent_hh_incomeE,
+         homeValuemedian = home_value_medianE,
+         percHomeowners = 100*pop_owner_occupied_unitsE/pop_units_countE,
+         percBlueCollar = 100*(occupation_sales_office_maleE +
+                                 occupation_sales_office_femaleE +
+                                 occupation_service_maleE +
+                                 occupation_service_femaleE -
+                                 occupation_protective_service_maleE -
+                                 occupation_protective_service_femaleE +
+                                 occupation_natresource_maleE +
+                                 occupation_natresource_femaleE +
+                                 occupation_prodtrans_maleE +
+                                 occupation_prodtrans_femaleE)/occupation_totalE,
+         percUnemployed=pop_unemployedE/pop_labor_forceE,
+         percPlumbingComplete = housing_units_plumbing_completeE/housing_units_plumbing_countE,
+         percFamiliesSingleParent = 100*(families_singleparent_femaleE + families_singleparent_maleE)/families_totalE,
+         percHH_NoVehicle = 100*(hh_owner_noVehicleE+hh_renter_noVehicleE)/hh_vehicle_countE,
+         percAgeOver64 = 100*(pop_age_male_65_66E + 
+                                pop_age_male_67_69E +
+                                pop_age_male_70_74E +
+                                pop_age_male_75_79E +
+                                pop_age_male_80_84E +
+                                pop_age_male_85upE +
+                                pop_age_female_65_66E + 
+                                pop_age_female_67_69E +
+                                pop_age_female_70_74E +
+                                pop_age_female_75_79E +
+                                pop_age_female_80_84E +
+                                pop_age_female_85upE)/pop_age_totalE,
+         percHH_LangIsolated = 100 * (hh_lang_ltd_apiE +
+                                        hh_lang_ltd_otherioE +
+                                        hh_lang_ltd_spanishE +
+                                        hh_lang_ltd_otherE)/hh_lang_totalE,
+         percHH_Crowded = 100 * (hh_owner_occupied_1.5_2_perRoomE +
+                                   hh_owner_occupied_gr2.0_perRoomE +
+                                   hh_renters_1.5_2_perRoomE +
+                                   hh_renters_gr2.0_perRoomE)/(hh_owner_occupiedE + hh_rentersE)) %>%
+  select(GEOID,percBelow200FPL:percHH_Crowded) %>%
+  st_drop_geometry()
+
+
+
 ```
 
 Now, we inspect the distributions of the variables to see which ones may be problematic. It appears that the following variables are highly skewed and should be transformed:
@@ -383,6 +454,17 @@ imp.bg <- dplyr::select(pcaData.bg,-GEOID,-income_20tile,-percAssistance)
 imp.bg <- missForest(imp.bg)
 imp.bg <- imp.bg$ximp
 imp.bg$GEOID <- pcaData.bg$GEOID
+
+imp.tr <- dplyr::select(pcaData.tr,-GEOID)
+imp.tr <- missForest(imp.tr)
+imp.tr <- imp.tr$ximp
+imp.tr$GEOID <- pcaData.tr$GEOID
+
+imp.zip <- dplyr::select(pcaData.zip,-GEOID)
+imp.zip <- missForest(imp.zip)
+imp.zip <- imp.zip$ximp
+imp.zip$GEOID <- pcaData.zip$GEOID
+
 
 missing <- select(pcaData.bg,GEOID,homeValuemedian)
 imputed <- select(imp.bg,GEOID,homeValuemedian)
@@ -416,16 +498,16 @@ First, we compute the area of the block groups (projecting to the appropriate st
 ```{r weight}
 
 bg <- bg %>% 
-  st_transform(prj) %>% # project to NAD83/New York West Projection
-  mutate(area_bg = st_area(.))# compute area
+#  st_transform(prj) %>% # project to NAD83/New York West Projection
+  mutate(area_bg = as.numeric(st_area(.)))# compute area
 ```
 
 Then we compute the area of the alternative polygons (projecting to the appropriate state plane projection)
 
 ```{r weight2}
 alt <- alt %>% 
-  st_transform(prj) %>% # project to NAD83/New York West Projection
-  mutate(area_alt = st_area(.))# compute area
+#  st_transform(prj) %>% # project to NAD83/New York West Projection
+  mutate(area_alt = as.numeric(st_area(.)))# compute area
 
 ```
 
@@ -505,9 +587,18 @@ bg_polygons <- st_intersection(bg_polygons,boundary.p)
 bg_polygons <- select(bg_polygons,GEOID)
 bg_polygons <- st_transform(bg_polygons,4326)
 
+zip_data <- pivot_longer(imp.zip,!GEOID,names_to = "var",values_to = "value")
+zip_data <- left_join(zip_data,v,by="var")
+zip_polygons <- select(zip,GEOID)
+zip_polygons <- st_intersection(zip_polygons,boundary.p)
+zip_polygons <- select(zip_polygons,GEOID)
+zip_polygons <- st_transform(zip_polygons,4326)
+
+
 
 bg_data$var <- paste0("census_",bg_data$var)
 alt_data$var <- paste0("census_",alt_data$var)
+zip_data$var <- paste0("census_",zip_data$var)
 
 ```
 
@@ -534,8 +625,16 @@ pca.bg <- prcomp(pca.matrix.bg, scale=TRUE, center=TRUE, na.action=na.omit, rank
 bg_data_wide$PC1 <- pca.bg$x[,1]
 bg_data <- pivot_longer(bg_data_wide,!GEOID,names_to = "var",values_to = "value")
 
+zip_data_wide <- zip_data %>% pivot_wider(id_cols=GEOID,names_from = var, values_from = value)
+pca.matrix.zip <- zip_data_wide %>% select(-GEOID)
+pca.zip <- prcomp(pca.matrix.zip, scale=TRUE, center=TRUE, na.action=na.omit, rank=3)
+zip_data_wide$PC1 <- pca.zip$x[,1]
+zip_data <- pivot_longer(zip_data_wide,!GEOID,names_to = "var",values_to = "value")
+
 
 alt_data_wide <- alt_data %>% distinct(alt_polygon_id,var,.keep_all=TRUE) %>% pivot_wider(id_cols=alt_polygon_id,names_from = var, values_from = value)
+
+
 
 pca.matrix.alt <- alt_data_wide %>% select(-alt_polygon_id)
 pca.alt <- prcomp(pca.matrix.alt, scale=TRUE, center=TRUE, na.action=na.omit, rank=3)
@@ -546,6 +645,10 @@ alt_data <- left_join(alt_data,v,by="var")
 
 colnames(alt_polygons)[1]<-"geo_id"
 colnames(bg_polygons)[1]<-"geo_id"
+colnames(zip_polygons)[1]<-"geo_id"
+
+
+
 write_sf(alt_polygons,"finalData/alternate.geojson",delete_dsn=TRUE)
 write_sf(bg_polygons,"finaldata/block_group.geojson",delete_dsn=TRUE)
 
@@ -563,7 +666,17 @@ overall <- overall %>% st_drop_geometry() %>% group_by(var) %>% summarise(value=
 
 n <- boundary %>% select(OBJECTID)
 colnames(n)[1]<-"geo_id"
+
+n$geo_type <- "Service Area"
+alt_polygons$geo_type <- alt_name
+bg_polygons$geo_type <- "Census Block Group"
+zip_polygons$geo_type <- "Census Zip Code Tabulation Area"
+
+
 write_sf(n,"finaldata/service_area.geojson",delete_dsn=TRUE)
+write_sf(alt_polygons,"finalData/alternate.geojson",delete_dsn=TRUE)
+write_sf(bg_polygons,"finaldata/block_group.geojson",delete_dsn=TRUE)
+write_sf(zip_polygons,"finaldata/zcta.geojson",delete_dsn=TRUE)
 ```
 
 ### Creating Indicator Data model.
