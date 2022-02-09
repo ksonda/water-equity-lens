@@ -180,6 +180,8 @@ cv <- c(pop_race_count = "B03002_001",
                  hh_lang_ltd_spanish = "C16002_004",
                  hh_lang_ltd_other = "C16002_013",
                  pop_age_total = "B01001_001",
+                 pop_age_male_under_5 = "B01001_003",
+                 pop_age_female_under_5 = "B01001_027",
                  pop_age_male_65_66 = "B01001_020",
                  pop_age_male_67_69 = "B01001_021",
                  pop_age_male_70_74 = "B01001_022",
@@ -208,7 +210,9 @@ cv <- c(pop_race_count = "B03002_001",
                 hh_renter_noVehicle = "B25044_010",
                 families_total = "B11003_001",
                 families_singleparent_female = "B11003_016",
-                families_singleparent_male = "B11003_010"
+                families_singleparent_male = "B11003_010",
+                hh_size_avg = "B25010_001"
+        
         
     )
 
@@ -256,6 +260,8 @@ Now we construct the variables for our PCA at the Tract and Block Group and Zip 
 ```{r variableConstruct}
 pcaData.bg <- data.bg %>% 
   mutate(percBelow200FPL = 100*(1-poverty_level_gr_200FPLE/poverty_level_totalE),
+         pop_total = pop_age_totalE,
+         size_hh_avg = hh_size_avgE,
          percEducLessHS = 100*(1-(pop_educ_HSdiplomaE +
                         pop_educ_GEDE +
                         pop_educ_college_less_1yearE +
@@ -299,6 +305,7 @@ pcaData.bg <- data.bg %>%
                                 pop_age_female_75_79E +
                                 pop_age_female_80_84E +
                                 pop_age_female_85upE)/pop_age_totalE,
+         percAgeUnder5 = 100*(pop_age_male_under_5E + pop_age_female_under_5E)/pop_age_totalE,
          percHH_LangIsolated = 100 * (hh_lang_ltd_apiE +
                                         hh_lang_ltd_otherioE +
                                         hh_lang_ltd_spanishE +
@@ -312,6 +319,8 @@ pcaData.bg <- data.bg %>%
 
 pcaData.tr <- data.tr %>% 
   mutate(percBelow200FPL = 100*(1-poverty_level_gr_200FPLE/poverty_level_totalE),
+         pop_total = pop_age_totalE,
+         size_hh_avg = hh_size_avgE,
          percEducLessHS = 100*(1-(pop_educ_HSdiplomaE +
                         pop_educ_GEDE +
                         pop_educ_college_less_1yearE +
@@ -355,6 +364,7 @@ pcaData.tr <- data.tr %>%
                                 pop_age_female_75_79E +
                                 pop_age_female_80_84E +
                                 pop_age_female_85upE)/pop_age_totalE,
+         percAgeUnder5 = 100*(pop_age_male_under_5E + pop_age_female_under_5E)/pop_age_totalE,
          percHH_LangIsolated = 100 * (hh_lang_ltd_apiE +
                                         hh_lang_ltd_otherioE +
                                         hh_lang_ltd_spanishE +
@@ -367,9 +377,10 @@ pcaData.tr <- data.tr %>%
   st_drop_geometry()
 
 
-
 pcaData.zip <- data.zip %>% 
   mutate(percBelow200FPL = 100*(1-poverty_level_gr_200FPLE/poverty_level_totalE),
+         pop_total = pop_age_totalE,
+         size_hh_avg = hh_size_avgE,
          percEducLessHS = 100*(1-(pop_educ_HSdiplomaE +
                         pop_educ_GEDE +
                         pop_educ_college_less_1yearE +
@@ -413,6 +424,7 @@ pcaData.zip <- data.zip %>%
                                 pop_age_female_75_79E +
                                 pop_age_female_80_84E +
                                 pop_age_female_85upE)/pop_age_totalE,
+         percAgeUnder5 = 100*(pop_age_male_under_5E + pop_age_female_under_5E)/pop_age_totalE,
          percHH_LangIsolated = 100 * (hh_lang_ltd_apiE +
                                         hh_lang_ltd_otherioE +
                                         hh_lang_ltd_spanishE +
@@ -566,8 +578,11 @@ v$units = c("USD",
             "%",
             "%",
             "%",
+            "%",
+            "people",
             "ratio",
-            "USD"
+            "USD",
+            "people"
             )
 
 colnames(v) <- c("var","units")
@@ -647,12 +662,6 @@ colnames(alt_polygons)[1]<-"geo_id"
 colnames(bg_polygons)[1]<-"geo_id"
 colnames(zip_polygons)[1]<-"geo_id"
 
-
-
-write_sf(alt_polygons,"finalData/alternate.geojson",delete_dsn=TRUE)
-write_sf(bg_polygons,"finaldata/block_group.geojson",delete_dsn=TRUE)
-
-
 overall <- left_join(bg_data,select(bg,GEOID,B01001_001E),by="GEOID")
 overall <- st_as_sf(overall)
 overall$area_bg <- st_area(overall)
@@ -677,6 +686,9 @@ write_sf(n,"finaldata/service_area.geojson",delete_dsn=TRUE)
 write_sf(alt_polygons,"finalData/alternate.geojson",delete_dsn=TRUE)
 write_sf(bg_polygons,"finaldata/block_group.geojson",delete_dsn=TRUE)
 write_sf(zip_polygons,"finaldata/zcta.geojson",delete_dsn=TRUE)
+
+pca_summary1 <- pca.bg$rotation %>% as.data.frame() %>% arrange(desc(abs(PC1)))
+pca_summary2 <- pca.bg$rotation %>% as.data.frame() %>% arrange(desc(abs(PC2)))
 ```
 
 ### Creating Indicator Data model.
@@ -829,54 +841,66 @@ Below, we add the block group and alternate polygon and overall aggregated censu
 
 ```{r}
 bg_data2 <- left_join(bg_data,v,by="var")
+zip_data2 <- left_join(zip_data,v,by="var")
 
 alt_data$geo_type <- alt_name
 alt_data$geo_id <- alt_data$alt_polygon_id
 alt_data <- select(alt_data,geo_id,geo_type,var,value,units)
 
-bg_data2$geo_type <- "block_group"
+bg_data2$geo_type <- "Census Block Group"
 bg_data2$geo_id <- bg_data2$GEOID
 bg_data2 <- select(bg_data2,geo_id,geo_type,var,value,units)
 
+zip_data2$geo_type <- "Census Zip Code Tabulation Area"
+zip_data2$geo_id <- zip_data$GEOID
+zip_data2 <- select(zip_data2,geo_id,geo_type,var,value,units)
+
 overall$geo_id <- name
-overall$geo_type <- "service_area"
+overall$geo_type <- "Service Area"
 overall$value <- as.numeric(overall$value)
 overall2 <- left_join(overall,v,by="var")
 overall2 <- select(overall2,geo_id,geo_type,var,value,units)
 
-census <- bind_rows(bg_data2,alt_data,overall2)
+census <- bind_rows(bg_data2,alt_data,zip_data2,overall2)
 census$year <- 2019
 census <- select(census,geo_id,geo_type,year,var,value,units)
+census2 <- census
+census2$year <- NA
+census2$value <- NA
+census <- bind_rows(census,census2) 
+census <- census %>% arrange(geo_type,geo_id,var,year)
+census$delta_percent <- NA
+write_csv(census,"finalData/census.csv") 
 ```
 
-Below, we add quartiles for each census variable.
+<!-- Below, we add quartiles for each census variable. -->
 
-```{r}
+<!-- ```{r} -->
 
-qc <-census %>% 
-  group_by(geo_type,var,year) %>%
-  summarise(var_quartile=quantile(value,
-                                    probs=c(0.25,0.5,0.75),na.rm=TRUE), 
-            q=c("p25","p50","p75")) %>%
-  pivot_wider(names_from=q, values_from=var_quartile)
+<!-- qc <-census %>%  -->
+<!--   group_by(geo_type,var,year) %>% -->
+<!--   summarise(var_quartile=quantile(value, -->
+<!--                                     probs=c(0.25,0.5,0.75),na.rm=TRUE),  -->
+<!--             q=c("p25","p50","p75")) %>% -->
+<!--   pivot_wider(names_from=q, values_from=var_quartile) -->
 
-qc <- left_join(census,qc,by=c("geo_type","var","year"))
-qc$var_quartile = NA
-qc <- qc %>% mutate(
-  var_quartile = case_when(value <= p25 ~ 1,
-                             value > p25 & value <= p50 ~ 2,
-                             value > p50 & value <= p75 ~ 3,
-                             value > p75 ~ 4)
-)
+<!-- qc <- left_join(census,qc,by=c("geo_type","var","year")) -->
+<!-- qc$var_quartile = NA -->
+<!-- qc <- qc %>% mutate( -->
+<!--   var_quartile = case_when(value <= p25 ~ 1, -->
+<!--                              value > p25 & value <= p50 ~ 2, -->
+<!--                              value > p50 & value <= p75 ~ 3, -->
+<!--                              value > p75 ~ 4) -->
+<!-- ) -->
 
-```
-Below, we isolate only the columns of interest and export the indicator data to csv. 
-```{r}
+<!-- ``` -->
+<!-- Below, we isolate only the columns of interest and export the indicator data to csv.  -->
+<!-- ```{r} -->
 
-census <- qc %>% select(geo_id,geo_type,year,var,units,value,var_quartile)
+<!-- census <- qc %>% select(geo_id,geo_type,year,var,units,value,var_quartile) -->
 
-write_csv(census,"finalData/census.csv")
-```
+<!-- write_csv(census,"finalData/census.csv") -->
+<!-- ``` -->
 
 
 ### Insights: most correlated variables
