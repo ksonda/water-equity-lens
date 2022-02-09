@@ -872,7 +872,37 @@ census <- census %>% arrange(geo_type,geo_id,var,year)
 census$delta_percent <- NA
 write_csv(census,"finalData/census.csv") 
 ```
+make osme wide data
 
+```{r}
+census_wide_bg <- census %>% 
+  filter(geo_type == "Census Block Group" & year == 2019) %>% 
+  pivot_wider(id_cols=c(geo_id,geo_type,year) , names_from = var, values_from = value) 
+
+
+indicators_wide_bg <- pillars %>% 
+  filter(geo_type == "Census Block Group" & year == 2020) %>% 
+  pivot_wider(id_cols=c(geo_id,geo_type,year) , names_from = var, values_from = value) 
+
+indicators_wide_bg_delta <- pillars %>% 
+  filter(geo_type == "Census Block Group" & year == 2020) %>% 
+  pivot_wider(id_cols=c(geo_id,geo_type,year) , names_from = var, values_from = delta_percent, names_prefix = "delta_") 
+
+is_all_numeric <- function(x) {
+  !any(is.na(suppressWarnings(as.numeric(na.omit(x))))) & is.character(x)
+}
+indicators_wide_bg <- indicators_wide_bg %>% 
+  mutate_if(is_all_numeric,as.numeric) %>% mutate(geo_id = as.character(geo_id))
+
+
+wide_bg <- left_join(bg_polygons, census_wide_bg, by=c("geo_id","geo_type"))
+wide_bg <- left_join(wide_bg, indicators_wide_bg, by=c("geo_id","geo_type"))
+wide_bg <- left_join(wide_bg, indicators_wide_bg_delta, by=c("geo_id","geo_type"))
+
+write_sf(wide_bg,"finalData/test_breaks.geojson")
+
+
+```
 <!-- Below, we add quartiles for each census variable. -->
 
 <!-- ```{r} -->
