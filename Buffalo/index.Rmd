@@ -692,8 +692,9 @@ var <- c("pillar1_hbi",
          "pillar1_cap",
          "pillar1_connections_water",
          "pillar1_connections_sewer",
+         "pillar1_complaints",
          "pillar2_workforce",
-         "pillar2_diversity_1",
+         "pillar2_diversity",
          "pillar2_procurement",
          "pillar2_training",
          "pillar2_park_distance",
@@ -707,14 +708,13 @@ var <- c("pillar1_hbi",
          "pillar3_outreach",
          "pillar3_meetings",
          "pillar3_water_board",
-         "pillar3_flooding",
-         "pillar3_complaints"
+         "pillar3_flooding"
          )
 
-geo_type <- c("block_group",alt_name,"service_area")
+geo_type <- c("Census Block Group",alt_name,"Census Zip Code Tabulation Area","Service Area")
 
 geo_id <- unique(bg_data$GEOID)
-geo_id <- as.data.frame(c(geo_id,unique(alt_data$alt_polygon_id)))
+geo_id <- as.data.frame(c(geo_id,unique(alt_data$alt_polygon_id),unique(zip_data$GEOID)))
 geo_id <- rbind(geo_id,name)
 
 colnames(geo_id)[1] <- "geo_id"
@@ -723,21 +723,27 @@ pillars <- expand_grid(geo_id,year,var)
 
 l_id <- length(geo_id[,1])
 l_bg <- length(unique(bg_data$GEOID))
+l_zip <- length(unique(zip_data$GEOID))
 l_alt <- length(unique(alt_data$alt_polygon_id))
 l_vars <- length(var)
 l_year <- length(year)
 
 l_bg <- l_bg*l_vars*l_year
 l_alt <- l_alt*l_vars*l_year
+l_zip <- l_zip*l_vars*l_year
 
-pillars$geo_type <- "block_group"
+pillars$geo_type <- "Census Block Group"
 pillars$geo_type[(l_bg+1):(l_bg+l_alt)] <- alt_name
-pillars$geo_type[(l_bg+l_alt+1):length(pillars$geo_type)] <- "service_area"
+pillars$geo_type[(l_bg+l_alt+1):(l_bg+l_alt+l_zip)] <- "Census Zip Code Tabulation Area"
+pillars$geo_type[(l_bg+l_alt+l_zip+1):length(pillars$geo_type)] <- "Service Area"
 
 pillars$units <- "%"
-pillars$units[which(pillars$var %in% c("pillar1_hbi",
+pillars$units[which(pillars$var %in% c("pillar2_diversity",
+                                       "pillar2_training",
+                                       "pillar3_meetings",
                                        "pillar2_workforce",
                                        "pillar2_public_facing",
+                                       "pillar3_water_board",
                                        "pillar3_breaks",
                                        "pillar3_sewer_failures"))] <- "ratio"
 ```
@@ -765,59 +771,59 @@ pillars <- select(pillars,geo_id,geo_type,year,var,value,units,delta_percent)
 pillars$units[which(pillars$var=="pillar1_affordability")] <- "character"
 pillars$value[which(pillars$var=="pillar1_affordability")] <- sample(c("Low","Medium","High"),length(pillars$var[which(pillars$var=="pillar1_affordability")]),replace=TRUE)
 pillars$delta_percent[which(pillars$units=="character")]<-NA 
-
-```
-
-Here, we demonstrate how a "bucket" can be specified a priori for each variable, and then used to calculate the appropriate bucket in the data. Here we use the `fuzzyjoin` R package, but the equivalent logic is in this SQL query 
-```{r, eval=FALSE}
-'SELECT vars, value, bucket_names 
-      FROM pillars 
-      LEFT JOIN buckets ON value BETWEEN lower_bound and upper_bound'
-
-```
-
-```{r}
-buckets <- read_csv("data/buckets.csv") %>% select(vars,bucket_names,lower_bound,upper_bound)
-pillars$val_numeric <- as.numeric(pillars$value)
-
-library(fuzzyjoin)
-# Attempt #3: use the fuzzyjoin package
-pillars<-fuzzy_left_join(pillars, buckets, 
-                by=c("val_numeric"="lower_bound", "val_numeric"="upper_bound"),
-                match_fun=list(`>=`, `<=`)) %>% 
-  select(geo_id:units,bucket_names,delta_percent) %>%
-  rename(var_bucket=bucket_names)%>%
-  distinct(.keep_all=TRUE)
-
-```
-
-Below, we calculate an indicator variable for which quartile a given polygon's percent change (delta_percent) is. 
-
-```{r}
-qe <- pillars %>% 
-  group_by(geo_type,var,year) %>%
-  summarise(delta_quartile=quantile(delta_percent,
-                                    probs=c(0.25,0.5,0.75),na.rm=TRUE), 
-            q=c("p25","p50","p75")) %>%
-  pivot_wider(names_from=q, values_from=delta_quartile)
-
-qe <- left_join(pillars,qe,by=c("geo_type","var","year"))
-qe$delta_quartile = NA
-qe <- qe %>% mutate(
-  delta_quartile = case_when(delta_percent <= p25 ~ 1,
-                             delta_percent > p25 & delta_percent <= p50 ~ 2,
-                             delta_percent > p50 & delta_percent <= p75 ~ 3,
-                             delta_percent > p75 ~ 4)
-)
-```
-
-Below, we isolate only the columns of interest and export the indicator data to csv. 
-```{r}
-
-pillars <- qe %>% select(geo_id,geo_type,year,var,units,value,var_bucket,delta_percent,delta_quartile)
-
 write_csv(pillars,"finalData/indicators.csv")
 ```
+
+<!-- Here, we demonstrate how a "bucket" can be specified a priori for each variable, and then used to calculate the appropriate bucket in the data. Here we use the `fuzzyjoin` R package, but the equivalent logic is in this SQL query  -->
+<!-- ```{r, eval=FALSE} -->
+<!-- 'SELECT vars, value, bucket_names  -->
+<!--       FROM pillars  -->
+<!--       LEFT JOIN buckets ON value BETWEEN lower_bound and upper_bound' -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- buckets <- read_csv("data/buckets.csv") %>% select(vars,bucket_names,lower_bound,upper_bound) -->
+<!-- pillars$val_numeric <- as.numeric(pillars$value) -->
+
+<!-- library(fuzzyjoin) -->
+<!-- # Attempt #3: use the fuzzyjoin package -->
+<!-- pillars<-fuzzy_left_join(pillars, buckets,  -->
+<!--                 by=c("val_numeric"="lower_bound", "val_numeric"="upper_bound"), -->
+<!--                 match_fun=list(`>=`, `<=`)) %>%  -->
+<!--   select(geo_id:units,bucket_names,delta_percent) %>% -->
+<!--   rename(var_bucket=bucket_names)%>% -->
+<!--   distinct(.keep_all=TRUE) -->
+
+<!-- ``` -->
+
+<!-- Below, we calculate an indicator variable for which quartile a given polygon's percent change (delta_percent) is.  -->
+
+<!-- ```{r} -->
+<!-- qe <- pillars %>%  -->
+<!--   group_by(geo_type,var,year) %>% -->
+<!--   summarise(delta_quartile=quantile(delta_percent, -->
+<!--                                     probs=c(0.25,0.5,0.75),na.rm=TRUE),  -->
+<!--             q=c("p25","p50","p75")) %>% -->
+<!--   pivot_wider(names_from=q, values_from=delta_quartile) -->
+
+<!-- qe <- left_join(pillars,qe,by=c("geo_type","var","year")) -->
+<!-- qe$delta_quartile = NA -->
+<!-- qe <- qe %>% mutate( -->
+<!--   delta_quartile = case_when(delta_percent <= p25 ~ 1, -->
+<!--                              delta_percent > p25 & delta_percent <= p50 ~ 2, -->
+<!--                              delta_percent > p50 & delta_percent <= p75 ~ 3, -->
+<!--                              delta_percent > p75 ~ 4) -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- Below, we isolate only the columns of interest and export the indicator data to csv.  -->
+<!-- ```{r} -->
+
+<!-- pillars <- qe %>% select(geo_id,geo_type,year,var,units,value,var_bucket,delta_percent,delta_quartile) -->
+
+<!-- write_csv(pillars,"finalData/indicators.csv") -->
+<!-- ``` -->
 
 Below, we add the block group and alternate polygon and overall aggregated census data into one long-form data frame 
 
