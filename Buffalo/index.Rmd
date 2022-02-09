@@ -681,7 +681,7 @@ alt_polygons$geo_type <- alt_name
 bg_polygons$geo_type <- "Census Block Group"
 zip_polygons$geo_type <- "Census Zip Code Tabulation Area"
 
-n$geo_id <- as.character(n$geo_id)
+n$geo_id <- name
 alt_polygons$geo_id <- as.character(alt_polygons$geo_id)
 bg_polygons$geo_id <- as.character(bg_polygons$geo_id)
 zip_polygons$geo_id <- as.character(zip_polygons$geo_id)
@@ -693,7 +693,7 @@ write_sf(zip_polygons,"finaldata/zcta.geojson",delete_dsn=TRUE)
 
 
 geometry_combined <- bind_rows(n,bg_polygons,zip_polygons,alt_polygons)
-write_sf(geometry_combined,"finalData/geometry_polygons.geojson")
+write_sf(geometry_combined,"finalData/geometry_polygons.geojson",delete_dsn=TRUE)
 
 pca_summary1 <- pca.bg$rotation %>% as.data.frame() %>% arrange(desc(abs(PC1)))
 pca_summary2 <- pca.bg$rotation %>% as.data.frame() %>% arrange(desc(abs(PC2)))
